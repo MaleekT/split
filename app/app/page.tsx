@@ -296,7 +296,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="bucket-grid">
-                {buckets.map((b) => {
+                {buckets.map((b, index) => {
                   const raw = routedTotals?.[String(b.id)]
                   return (
                     <BucketCard
@@ -305,6 +305,7 @@ export default function DashboardPage() {
                       goal={goals?.[String(b.id)]}
                       routedTotal={raw ? BigInt(raw) : 0n}
                       iconSlug={bucketIcons?.[String(b.id)]}
+                      colorIndex={index}
                       onEdit={() => setModal({ kind: 'edit', bucket: b })}
                       onWithdraw={() => setModal({ kind: 'withdraw', bucket: b })}
                       onSchedule={() => setModal({ kind: 'schedule', bucket: b })}

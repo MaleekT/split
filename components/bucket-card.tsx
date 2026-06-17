@@ -9,11 +9,23 @@ import { shortAddress, formatUsdc } from '@/lib/format'
 import { bpsToPCT } from '@/lib/bps'
 import { SquarePen, ArrowDownToLine, CalendarClock, Target, Trash2 } from 'lucide-react'
 
+const BUCKET_PALETTE = [
+  { r: 29,  g: 158, b: 117 },
+  { r: 96,  g: 165, b: 250 },
+  { r: 168, g: 85,  b: 247 },
+  { r: 251, g: 146, b: 60  },
+  { r: 244, g: 114, b: 182 },
+  { r: 34,  g: 211, b: 238 },
+  { r: 251, g: 191, b: 36  },
+  { r: 248, g: 113, b: 113 },
+] as const
+
 interface Props {
   bucket:       SplitBucket
   goal?:        bigint
   routedTotal?: bigint
   iconSlug?:    string
+  colorIndex:   number
   onEdit:       () => void
   onWithdraw:   () => void
   onSchedule:   () => void
@@ -44,14 +56,17 @@ function Ring({ pct, color, Icon }: { pct: number; color: string; Icon: React.Co
 const actionItem = 'flex flex-col items-center gap-1 flex-1 rounded-lg py-1.5 transition-colors hover:bg-[var(--bg-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]'
 const actionLabel = { fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 11 } as const
 
-export function BucketCard({ bucket, goal, routedTotal, iconSlug, onEdit, onWithdraw, onSchedule, onSetGoal, onDelete }: Props) {
+export function BucketCard({ bucket, goal, routedTotal, iconSlug, colorIndex, onEdit, onWithdraw, onSchedule, onSetGoal, onDelete }: Props) {
   const isHold      = bucket.destination === ZERO_ADDRESS
   const hasGoal     = goal !== undefined && goal > 0n
   const canWithdraw = bucket.balance > 0n
   const pct         = bpsToPCT(bucket.bps)
-  const ringColor   = isHold ? 'var(--info)' : 'var(--accent)'
   const amount      = isHold ? bucket.balance : (routedTotal ?? 0n)
   const Icon        = bucketIconFor(iconSlug)
+
+  const { r, g, b } = BUCKET_PALETTE[colorIndex % BUCKET_PALETTE.length]!
+  const glowRgb  = `${r},${g},${b}`
+  const ringColor = `rgb(${r},${g},${b})`
 
   // Float percentage — avoids BigInt truncation that makes sub-1% progress appear as 0
   const progressRaw = hasGoal ? Math.min(100, (Number(amount) / Number(goal ?? 1n)) * 100) : 0
@@ -62,8 +77,6 @@ export function BucketCard({ bucket, goal, routedTotal, iconSlug, onEdit, onWith
     ? progressRaw.toFixed(1)
     : String(Math.round(progressRaw))
 
-  const glowRgb = isHold ? '96,165,250' : '29,158,117'
-
   return (
     <article
       className="relative flex flex-col transition-colors"
@@ -72,11 +85,16 @@ export function BucketCard({ bucket, goal, routedTotal, iconSlug, onEdit, onWith
         border: `0.5px solid rgba(${glowRgb},0.28)`,
         borderRadius: 14,
         padding: 18,
+        overflow: 'hidden',
       }}
     >
-      {/* Decorative ghost rings */}
-      <span aria-hidden="true" style={{ position: 'absolute', right: 48, top: '46%', width: 11, height: 11, borderRadius: 999, border: `1px solid rgba(${glowRgb},0.18)`, pointerEvents: 'none' }} />
-      <span aria-hidden="true" style={{ position: 'absolute', right: 22, top: '60%', width: 7, height: 7, borderRadius: 999, border: `1px solid rgba(${glowRgb},0.10)`, pointerEvents: 'none' }} />
+      {/* Atmospheric bokeh blobs */}
+      <span aria-hidden="true" style={{ position: 'absolute', top: '-10%', right: '-5%',  width: 70, height: 70, borderRadius: '50%', background: `rgba(${glowRgb},0.18)`, filter: 'blur(32px)', pointerEvents: 'none' }} />
+      <span aria-hidden="true" style={{ position: 'absolute', top: '35%',  right: '8%',   width: 55, height: 55, borderRadius: '50%', background: `rgba(${glowRgb},0.18)`, filter: 'blur(28px)', pointerEvents: 'none' }} />
+      <span aria-hidden="true" style={{ position: 'absolute', top: '15%',  right: '28%',  width: 40, height: 40, borderRadius: '50%', background: `rgba(${glowRgb},0.18)`, filter: 'blur(22px)', pointerEvents: 'none' }} />
+      <span aria-hidden="true" style={{ position: 'absolute', bottom: '20%', right: '15%', width: 30, height: 30, borderRadius: '50%', background: `rgba(${glowRgb},0.18)`, filter: 'blur(18px)', pointerEvents: 'none' }} />
+      <span aria-hidden="true" style={{ position: 'absolute', bottom: '10%', right: '40%', width: 22, height: 22, borderRadius: '50%', background: `rgba(${glowRgb},0.18)`, filter: 'blur(14px)', pointerEvents: 'none' }} />
+      <span aria-hidden="true" style={{ position: 'absolute', top: '50%',  right: '52%',  width: 14, height: 14, borderRadius: '50%', background: `rgba(${glowRgb},0.18)`, filter: 'blur(10px)', pointerEvents: 'none' }} />
 
       {/* Header: name + badge */}
       <div className="flex items-center justify-between gap-3">

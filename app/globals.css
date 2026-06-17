@@ -10,6 +10,7 @@
   --text-3:      #9A9A9A;
   --border:      rgba(0, 0, 0, 0.08);
   --accent:         #1D9E75;
+  --accent-dark:    #0c1f14;
   --accent-bg:      rgba(29, 158, 117, 0.10);
   --accent-bg-hover: rgba(29, 158, 117, 0.20);
   --danger:      #D93025;
@@ -29,6 +30,7 @@
   --text-3:      #52525B;
   --border:      rgba(255, 255, 255, 0.08);
   --accent:         #1D9E75;
+  --accent-dark:    #0c1f14;
   --accent-bg:      rgba(29, 158, 117, 0.15);
   --accent-bg-hover: rgba(29, 158, 117, 0.28);
   --danger:      #EF4444;
@@ -141,8 +143,8 @@ code {
 
 .bucket-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
 }
 
 /* ── Badge ─────────────────────────────────────────────────────────────────── */

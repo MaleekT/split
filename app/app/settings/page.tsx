@@ -135,7 +135,8 @@ export default function SettingsPage() {
           onClick={() => setModal({ kind: 'add' })}
           disabled={buckets.length >= 10}
           title={buckets.length >= 10 ? 'Maximum of 10 buckets reached' : undefined}
-          className="shrink-0 inline-flex items-center gap-1 px-4 py-2 rounded-xl text-sm font-semibold font-sans text-[var(--accent)] bg-[var(--accent-bg)] border-[0.5px] border-[var(--accent)] hover:shadow-[0_0_0_2px_var(--accent)] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          className="shrink-0 inline-flex items-center gap-1 px-4 py-2.5 rounded-xl text-sm font-semibold font-sans text-white transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ background: 'linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%)' }}
         >
           + Add bucket
         </button>
@@ -175,7 +176,7 @@ export default function SettingsPage() {
         </div>
       ) : (
         <div className="bucket-grid">
-          {buckets.map((b) => {
+          {buckets.map((b, index) => {
             const rawRouted = routedTotals?.[String(b.id)]
             return (
             <div key={String(b.id)} className="relative">
@@ -219,6 +220,7 @@ export default function SettingsPage() {
                 goal={goals[String(b.id)]}
                 routedTotal={rawRouted ? BigInt(rawRouted) : 0n}
                 iconSlug={bucketIcons?.[String(b.id)]}
+                colorIndex={index}
                 onEdit={() => setModal({ kind: 'edit', bucket: b })}
                 onWithdraw={() => setModal({ kind: 'withdraw', bucket: b })}
                 onSchedule={() => setModal({ kind: 'schedule', bucket: b })}

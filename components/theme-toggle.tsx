@@ -21,7 +21,9 @@ export function ThemeToggle() {
   }
 
   const activeStyle = (active: boolean): React.CSSProperties => ({
-    background: active ? 'var(--bg-2)' : 'transparent',
+    background: active
+      ? 'linear-gradient(135deg, rgba(255,255,255,0.09) 0%, rgba(255,255,255,0.03) 100%), var(--bg-2)'
+      : 'transparent',
     color: active ? 'var(--text)' : 'var(--text-2)',
     fontWeight: active ? 500 : 400,
     boxShadow: active ? '0 1px 3px rgba(0,0,0,0.18)' : 'none',
