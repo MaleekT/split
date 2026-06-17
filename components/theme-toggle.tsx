@@ -21,12 +21,10 @@ export function ThemeToggle() {
   }
 
   const activeStyle = (active: boolean): React.CSSProperties => ({
-    background: active
-      ? 'linear-gradient(135deg, rgba(255,255,255,0.09) 0%, rgba(255,255,255,0.03) 100%), var(--bg-2)'
-      : 'transparent',
-    color: active ? 'var(--text)' : 'var(--text-2)',
-    fontWeight: active ? 500 : 400,
-    boxShadow: active ? '0 1px 3px rgba(0,0,0,0.18)' : 'none',
+    background: active ? 'var(--accent)' : 'transparent',
+    color: active ? '#fff' : 'var(--text-2)',
+    fontWeight: active ? 600 : 400,
+    boxShadow: active ? '0 2px 6px rgba(29,158,117,0.30)' : 'none',
   })
 
   const btnCls = 'inline-flex flex-1 items-center justify-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-sans transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]'
