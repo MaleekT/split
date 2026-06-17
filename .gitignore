@@ -1,0 +1,35 @@
+# Next.js
+.next/
+out/
+build/
+
+# Dependencies
+node_modules/
+contracts/lib/
+contracts/out/
+contracts/cache/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Foundry
+contracts/broadcast/
+contracts/.cache/
+
+# TypeScript
+tsconfig.tsbuildinfo
+
+# Misc
+.DS_Store
+*.log
+npm-debug.log*
+.vercel
+*.pem
+
+# Local planning docs and AI-generated images
+SPLIT-UI-REDESIGN.md
+split-CLAUDE.md
+split-prd.md
+ChatGPT Image*

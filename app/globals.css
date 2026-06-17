@@ -1,0 +1,157 @@
+@import "tailwindcss";
+
+/* ── Design tokens ─────────────────────────────────────────────────────────── */
+:root {
+  --bg:          #F4F2EE;
+  --bg-2:        #FFFFFF;
+  --bg-3:        #ECEAE6;
+  --text:        #0E0E0E;
+  --text-2:      #5A5A5A;
+  --text-3:      #9A9A9A;
+  --border:      rgba(0, 0, 0, 0.08);
+  --accent:      #1D9E75;
+  --accent-bg:   rgba(29, 158, 117, 0.10);
+  --danger:      #D93025;
+  --danger-bg:   rgba(217, 48, 37, 0.08);
+  --warning:     #B45309;
+  --warning-bg:  rgba(180, 83, 9, 0.10);
+  --info:        #0066FF;
+  --info-bg:     rgba(0, 102, 255, 0.10);
+}
+
+.dark {
+  --bg:          #0B0B0F;
+  --bg-2:        #15151C;
+  --bg-3:        #1F1F28;
+  --text:        #F5F5F7;
+  --text-2:      #A1A1AA;
+  --text-3:      #52525B;
+  --border:      rgba(255, 255, 255, 0.08);
+  --accent:      #1D9E75;
+  --accent-bg:   rgba(29, 158, 117, 0.15);
+  --danger:      #EF4444;
+  --danger-bg:   rgba(239, 68, 68, 0.12);
+  --warning:     #FBBF24;
+  --warning-bg:  rgba(251, 191, 36, 0.12);
+  --info:        #60A5FA;
+  --info-bg:     rgba(96, 165, 250, 0.12);
+}
+
+/* ── Legacy --split-* tokens remapped onto the new palette ─────────────────────
+   Components written before the redesign reference var(--split-*). Pointing those
+   at the new tokens themes every untouched surface (modals, profile, landing) in
+   both modes from one place — var() resolves --bg-2 etc. to the active .dark value. */
+:root {
+  --split-accent:         var(--accent);
+  --split-accent-light:   var(--accent-bg);
+  --split-bg-primary:     var(--bg-2);
+  --split-bg-secondary:   var(--bg-3);
+  --split-bg-tertiary:    var(--bg);
+  --split-text-primary:   var(--text);
+  --split-text-secondary: var(--text-2);
+  --split-text-tertiary:  var(--text-3);
+  --split-text-danger:    var(--danger);
+  --split-text-success:   var(--accent);
+  --split-border:         var(--border);
+  --split-border-subtle:  var(--border);
+}
+
+/* ── Map to Tailwind utilities (inline = utilities reference CSS vars at runtime) ── */
+@theme inline {
+  --color-accent:             var(--accent);
+  --color-accent-light:       var(--accent-bg);
+  --color-bg-primary:         var(--bg-2);
+  --color-bg-secondary:       var(--bg-3);
+  --color-bg-tertiary:        var(--bg);
+  --color-text-primary:       var(--text);
+  --color-text-secondary:     var(--text-2);
+  --color-text-tertiary:      var(--text-3);
+  --color-text-danger:        var(--danger);
+  --color-text-success:       var(--accent);
+  --color-border:             var(--border);
+  --color-border-subtle:      var(--border);
+
+  /* Fonts — Next.js font loader sets --font-inter and --font-jetbrains-mono at runtime */
+  --font-sans: var(--font-inter, Inter, system-ui, sans-serif);
+  --font-mono: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+}
+
+/* ── Base ── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tailwind v4 Preflight drops cursor:pointer on buttons — restore it for enabled interactive controls */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  summary,
+  label[for] {
+    cursor: pointer;
+  }
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-inter, 'Inter', system-ui, sans-serif);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+/* Tabular figures for monospace numeric content (USDC amounts, addresses, percentages) */
+.font-mono,
+code {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-feature-settings: 'tnum' 1, 'zero' 1;
+}
+
+/* ── Layout primitives ─────────────────────────────────────────────────────── */
+.page-wrapper {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+@media (max-width: 640px) {
+  .page-wrapper { padding: 16px; }
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 16px;
+  align-items: start;
+  margin-top: 16px;
+}
+
+@media (max-width: 1024px) {
+  .dashboard-grid { grid-template-columns: 1fr; }
+}
+
+.bucket-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+/* ── Badge ─────────────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
