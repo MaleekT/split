@@ -108,7 +108,7 @@ export function InsightsCard({ address }: Props) {
       if (idx >= 0) {
         let raw = 0n
         try { raw = BigInt(i.amountRaw) } catch { raw = 0n }
-        rawBuckets[idx] += raw
+        rawBuckets[idx] = (rawBuckets[idx] ?? 0n) + raw
       }
     }
     const buckets = rawBuckets.map(r => usd(r))
