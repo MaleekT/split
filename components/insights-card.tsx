@@ -5,7 +5,6 @@ import { useQuery } from '@tanstack/react-query'
 import { isAddress, formatUnits } from 'viem'
 import { BarChart3, ArrowUp, ArrowDown } from 'lucide-react'
 
-// Minimal shape of the items /api/activity returns (see app/api/activity/[address]/route.ts).
 interface ActivityItem {
   kind: 'deposit' | 'auto_send' | 'scheduled_send' | 'withdraw'
   amountRaw: string
@@ -13,6 +12,7 @@ interface ActivityItem {
 }
 
 const DAY = 86_400
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const usd = (raw: bigint) => parseFloat(formatUnits(raw, 6))
 
 function pctChange(curr: number, prev: number): number | null {
@@ -33,6 +33,7 @@ const VALUE_STYLE: React.CSSProperties = {
   color: 'var(--text)',
 }
 
+// Small sparkline — used on the dashboard compact card
 function Sparkline({ points }: { points: number[] }) {
   const w = 120, h = 36
   if (points.length < 2) return <svg width={w} height={h} aria-hidden="true" />
@@ -45,6 +46,69 @@ function Sparkline({ points }: { points: number[] }) {
     <svg width={w} height={h} aria-hidden="true">
       <path d={area} fill="var(--accent-bg)" />
       <path d={line} fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+// Smooth cubic bezier through a series of [x, y] coords
+function smoothLine(coords: readonly (readonly [number, number])[]): string {
+  if (coords.length < 2) return ''
+  let d = `M${coords[0]![0].toFixed(1)},${coords[0]![1].toFixed(1)}`
+  for (let i = 1; i < coords.length; i++) {
+    const [x0, y0] = coords[i - 1]!
+    const [x1, y1] = coords[i]!
+    const mx = ((x0 + x1) / 2).toFixed(1)
+    d += ` C${mx},${y0.toFixed(1)} ${mx},${y1.toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)}`
+  }
+  return d
+}
+
+// Full-width chart — used on the activity page large card
+function FullChart({ points, labels }: { points: number[]; labels: string[] }) {
+  const W = 600, H = 140, PAD_T = 8, PAD_B = 28
+  const chartH = H - PAD_T - PAD_B
+
+  if (points.length < 2) {
+    return <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" aria-hidden="true" style={{ display: 'block' }} />
+  }
+
+  const max = Math.max(...points, 1)
+  const step = W / (points.length - 1)
+  const cy = (v: number) => PAD_T + chartH - (v / max) * chartH
+  const coords = points.map((p, i) => [i * step, cy(p)] as const)
+
+  const line = smoothLine(coords)
+  const first = coords[0]!
+  const last  = coords[coords.length - 1]!
+  const baseY = (PAD_T + chartH).toFixed(1)
+  const area  = `${line} L${last[0].toFixed(1)},${baseY} L${first[0].toFixed(1)},${baseY} Z`
+
+  const showEvery = points.length <= 7 ? 1 : Math.ceil(points.length / 7)
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      width="100%"
+      height={H}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      style={{ display: 'block' }}
+    >
+      <defs>
+        <linearGradient id="fullChartGrad" gradientUnits="userSpaceOnUse" x1="0" y1={PAD_T} x2="0" y2={PAD_T + chartH}>
+          <stop offset="0%"   stopColor="var(--accent)" stopOpacity="0.3" />
+          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.03" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill="url(#fullChartGrad)" />
+      <path d={line} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      {coords.map(([x], i) =>
+        i % showEvery === 0 && labels[i] ? (
+          <text key={i} x={x.toFixed(1)} y={H - 6} textAnchor="middle" fontSize="11" fill="var(--text-3)" fontFamily="Inter, sans-serif">
+            {labels[i]}
+          </text>
+        ) : null,
+      )}
     </svg>
   )
 }
@@ -62,9 +126,10 @@ function StatChange({ change }: { change: number | null }) {
 
 interface Props {
   address: string
+  large?: boolean
 }
 
-export function InsightsCard({ address }: Props) {
+export function InsightsCard({ address, large = false }: Props) {
   const [days, setDays] = useState(7)
 
   const { data } = useQuery({
@@ -94,13 +159,10 @@ export function InsightsCard({ address }: Props) {
     const depCurr = sum(curr, 'deposit'), depPrev = sum(prev, 'deposit')
     const autoCurr = sum(curr, 'auto_send'), autoPrev = sum(prev, 'auto_send')
 
-    // Hourly buckets for 7-day view (168 pts) so same-day transactions show variation.
-    // Daily buckets for 30-day view (30 pts).
+    // Hourly buckets for 7-day sparkline (dashboard compact card)
     const HOUR = 3_600
     const bucketUnit  = days === 7 ? HOUR : DAY
     const bucketCount = days === 7 ? days * 24 : days
-    // Accumulate as bigint (exact integers); convert with usd() once per bucket — same
-    // normalization path as the deposit/autoSent stats above.
     const rawBuckets = new Array(bucketCount).fill(0n) as bigint[]
     for (const i of curr) {
       if (i.kind !== 'deposit') continue
@@ -112,9 +174,6 @@ export function InsightsCard({ address }: Props) {
       }
     }
     const buckets = rawBuckets.map(r => usd(r))
-
-    // Trim leading and trailing zero-buckets so the chart zooms to the active window.
-    // One 0 is kept on each side for slope context. All-zero (no activity) stays as-is.
     const firstNonZero = buckets.findIndex(v => v > 0)
     let spark: number[]
     if (firstNonZero < 0) {
@@ -127,16 +186,42 @@ export function InsightsCard({ address }: Props) {
       spark = [0, ...buckets.slice(firstNonZero, lastNonZero + 1), 0]
     }
 
-    return {
-      deposits:    usd(depCurr),
-      autoSent:    usd(autoCurr),
-      txCount:     curr.length,
-      depChange:   pctChange(usd(depCurr), usd(depPrev)),
-      autoChange:  pctChange(usd(autoCurr), usd(autoPrev)),
-      txChange:    pctChange(curr.length, prev.length),
-      spark,
+    // Daily buckets for the large chart — skipped when large=false to avoid unnecessary work.
+    // Single pass O(n) assignment instead of nested O(n×days) loop.
+    let dailyBuckets: number[] = []
+    let dayLabels: string[] = []
+    if (large) {
+      const rawDaily = new Array(days).fill(0n) as bigint[]
+      for (const i of curr) {
+        if (i.kind !== 'deposit') continue
+        const dayIdx = Math.min(days - 1, Math.floor((i.timestamp - currStart) / DAY))
+        if (dayIdx >= 0) {
+          let raw = 0n
+          try { raw = BigInt(i.amountRaw) } catch { raw = 0n }
+          rawDaily[dayIdx] = (rawDaily[dayIdx] ?? 0n) + raw
+        }
+      }
+      dailyBuckets = rawDaily.map(r => usd(r))
+      dayLabels = Array.from({ length: days }, (_, d) => {
+        const date = new Date((currStart + d * DAY + DAY / 2) * 1000)
+        return days === 7
+          ? (DAY_NAMES[date.getDay()] ?? '')
+          : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      })
     }
-  }, [data, days])
+
+    return {
+      deposits:   usd(depCurr),
+      autoSent:   usd(autoCurr),
+      txCount:    curr.length,
+      depChange:  pctChange(usd(depCurr), usd(depPrev)),
+      autoChange: pctChange(usd(autoCurr), usd(autoPrev)),
+      txChange:   pctChange(curr.length, prev.length),
+      spark,
+      dailyBuckets,
+      dayLabels,
+    }
+  }, [data, days, large])
 
   return (
     <section style={{ background: 'var(--bg-2)', border: '0.5px solid var(--border)', borderRadius: 14, padding: 20 }}>
@@ -158,7 +243,6 @@ export function InsightsCard({ address }: Props) {
       </div>
 
       <div className="flex items-end justify-between gap-4">
-        {/* 3-col grid: labels/values/changes share grid rows so Y-positions stay aligned regardless of label wrap */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, auto)', columnGap: '1.5rem', rowGap: '2px' }}>
           <p style={LABEL_STYLE}>Total deposits</p>
           <p style={LABEL_STYLE}>Auto-sent</p>
@@ -170,8 +254,14 @@ export function InsightsCard({ address }: Props) {
           <StatChange change={stats.autoChange} />
           <StatChange change={stats.txChange} />
         </div>
-        <Sparkline points={stats.spark} />
+        {!large && <Sparkline points={stats.spark} />}
       </div>
+
+      {large && (
+        <div style={{ marginTop: 20 }}>
+          <FullChart points={stats.dailyBuckets} labels={stats.dayLabels} />
+        </div>
+      )}
     </section>
   )
 }
