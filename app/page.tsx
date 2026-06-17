@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import {
   Layers, Link as LinkIcon, ArrowDownToLine, GitBranch,
-  ArrowUpRight, Wallet, Target, CalendarClock, Menu, X,
+  ArrowUpRight, Wallet, Target, CalendarClock, Menu, X, Sun, Moon,
 } from 'lucide-react'
 import { SplitLogo } from '@/components/brand/logo'
 import { ThemeToggle } from '@/components/theme-toggle'
@@ -554,6 +554,31 @@ function BucketCard({ b, i }: { b: typeof BTYPES[0]; i: number }) {
   )
 }
 
+/* ── Nav-only icon toggle (does not affect the app dashboard toggle) ── */
+function NavThemeToggle() {
+  const [isDark, setIsDark] = useState(false)
+  useEffect(() => { setIsDark(document.documentElement.classList.contains('dark')) }, [])
+  function setTheme(dark: boolean) {
+    document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('split-theme', dark ? 'dark' : 'light')
+    setIsDark(dark)
+  }
+  const pill = (active: boolean): React.CSSProperties => ({
+    width: 28, height: 28, borderRadius: '50%',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: active ? 'linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%)' : 'transparent',
+    color: active ? '#fff' : 'var(--text-2)',
+    boxShadow: active ? '0 2px 6px rgba(29,158,117,0.28)' : 'none',
+    border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+  })
+  return (
+    <div role="group" aria-label="Color theme" style={{ display:'flex', alignItems:'center', gap:2, padding:3, borderRadius:999, background:'var(--bg-3)' }}>
+      <button type="button" aria-label="Light mode" aria-pressed={!isDark} onClick={() => setTheme(false)} style={pill(!isDark)}><Sun size={13} /></button>
+      <button type="button" aria-label="Dark mode"  aria-pressed={isDark}  onClick={() => setTheme(true)}  style={pill(isDark)}><Moon size={13} /></button>
+    </div>
+  )
+}
+
 /* ── Main component ──────────────────────────────────────────────── */
 export default function SplitHomePage() {
   const [navScrolled, setNavScrolled] = useState(false)
@@ -737,7 +762,7 @@ export default function SplitHomePage() {
             <button className="sp-nav-btn" onClick={() => scrollTo('faq')}>FAQ</button>
           </div>
           <div className="sp-nav-right">
-            <ThemeToggle />
+            <NavThemeToggle />
             <Link href="/app" className="sp-btn-cta">Open App</Link>
             <button className="sp-ham" onClick={() => setMenuOpen((v) => !v)} aria-label="Menu">
               {menuOpen ? <X size={16} /> : <Menu size={16} />}
