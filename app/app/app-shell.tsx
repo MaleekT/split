@@ -37,6 +37,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
               fontSize: 14,
               color: active ? 'var(--accent)' : 'var(--text-2)',
               background: active ? 'var(--accent-bg)' : 'transparent',
+              border: active ? '0.5px solid var(--accent-border)' : '0.5px solid transparent',
             }}
           >
             <Icon size={18} />

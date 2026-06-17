@@ -35,7 +35,7 @@ export function ThemeToggle() {
     <div
       role="group"
       aria-label="Color theme"
-      className="flex items-center w-full gap-[2px] p-[3px] rounded-full bg-[var(--bg-3)] border-[0.5px] border-[var(--border)]"
+      className="flex items-center w-full gap-[2px] p-[3px] rounded-full bg-[var(--bg-3)]"
     >
       <button type="button" aria-label="Light mode" aria-pressed={!isDark} onClick={() => setTheme(false)} className={btnCls} style={activeStyle(!isDark)}>
         <Sun size={13} />
