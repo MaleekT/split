@@ -94,17 +94,24 @@ export function InsightsCard({ address }: Props) {
     const depCurr = sum(curr, 'deposit'), depPrev = sum(prev, 'deposit')
     const autoCurr = sum(curr, 'auto_send'), autoPrev = sum(prev, 'auto_send')
 
-    // Daily deposit totals (oldest → newest) for the sparkline.
-    const buckets = new Array(days).fill(0) as number[]
+    // Hourly buckets for 7-day view (168 pts) so same-day transactions show variation.
+    // Daily buckets for 30-day view (30 pts).
+    const HOUR = 3_600
+    const bucketUnit  = days === 7 ? HOUR : DAY
+    const bucketCount = days === 7 ? days * 24 : days
+    // Accumulate as bigint (exact integers); convert with usd() once per bucket — same
+    // normalization path as the deposit/autoSent stats above.
+    const rawBuckets = new Array(bucketCount).fill(0n) as bigint[]
     for (const i of curr) {
       if (i.kind !== 'deposit') continue
-      const dayIdx = Math.min(days - 1, Math.floor((i.timestamp - currStart) / DAY))
-      if (dayIdx >= 0) {
-        let amt = 0n
-        try { amt = BigInt(i.amountRaw) } catch { amt = 0n }
-        buckets[dayIdx] = (buckets[dayIdx] ?? 0) + usd(amt)
+      const idx = Math.min(bucketCount - 1, Math.floor((i.timestamp - currStart) / bucketUnit))
+      if (idx >= 0) {
+        let raw = 0n
+        try { raw = BigInt(i.amountRaw) } catch { raw = 0n }
+        rawBuckets[idx] += raw
       }
     }
+    const buckets = rawBuckets.map(r => usd(r))
 
     return {
       deposits:    usd(depCurr),
