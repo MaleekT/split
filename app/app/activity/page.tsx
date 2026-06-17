@@ -18,7 +18,9 @@ export default function ActivityPage() {
       </p>
       <div className="grid gap-5 lg:grid-cols-[1fr_380px] items-start">
         <ActivityFeed address={address} />
-        <InsightsCard address={address} large />
+        <div className="lg:sticky lg:top-6 lg:self-start">
+          <InsightsCard address={address} large />
+        </div>
       </div>
     </div>
   )
