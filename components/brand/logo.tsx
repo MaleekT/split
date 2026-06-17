@@ -1,7 +1,8 @@
 import Image from 'next/image'
 
-// Dark logo: 862×345 (2.5:1) — white text, shown in dark mode only
-// Light logo: 1774×887 (2.0:1) — dark text, shown in light mode only
+// Both logos: 1774×887 (2.0:1)
+// Dark mode: /logo.png (Split Dark Mode.png) — white text
+// Light mode: /logo-light.png (Split Light MOde.png) — dark text
 export function SplitLogo({ size = 28 }: { size?: number }) {
   return (
     <>
@@ -9,7 +10,7 @@ export function SplitLogo({ size = 28 }: { size?: number }) {
         src="/logo.png"
         alt="Split"
         height={size}
-        width={Math.round(size * 2.5)}
+        width={Math.round(size * 2)}
         priority
         className="hidden dark:block"
       />
