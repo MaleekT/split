@@ -113,6 +113,20 @@ export function InsightsCard({ address }: Props) {
     }
     const buckets = rawBuckets.map(r => usd(r))
 
+    // Trim leading and trailing zero-buckets so the chart zooms to the active window.
+    // One 0 is kept on each side for slope context. All-zero (no activity) stays as-is.
+    const firstNonZero = buckets.findIndex(v => v > 0)
+    let spark: number[]
+    if (firstNonZero < 0) {
+      spark = buckets
+    } else {
+      let lastNonZero = firstNonZero
+      for (let j = buckets.length - 1; j > firstNonZero; j--) {
+        if ((buckets[j] ?? 0) > 0) { lastNonZero = j; break }
+      }
+      spark = [0, ...buckets.slice(firstNonZero, lastNonZero + 1), 0]
+    }
+
     return {
       deposits:    usd(depCurr),
       autoSent:    usd(autoCurr),
@@ -120,7 +134,7 @@ export function InsightsCard({ address }: Props) {
       depChange:   pctChange(usd(depCurr), usd(depPrev)),
       autoChange:  pctChange(usd(autoCurr), usd(autoPrev)),
       txChange:    pctChange(curr.length, prev.length),
-      spark:       buckets,
+      spark,
     }
   }, [data, days])
 
