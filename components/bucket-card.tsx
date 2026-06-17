@@ -95,38 +95,31 @@ export function BucketCard({ bucket, goal, routedTotal, iconSlug, colorIndex, on
       }}
     >
 
-      {/* ── Nebula cloud atmosphere ── */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'absolute', inset: 0, borderRadius: 16, pointerEvents: 'none',
-          background: `
-            radial-gradient(circle at 25% 45%, rgba(${glow},0.14) 0%, transparent 45%),
-            radial-gradient(circle at 82% 62%, rgba(${glow},0.10) 0%, transparent 50%),
-            radial-gradient(circle at 55% 95%, rgba(${glow},0.08) 0%, transparent 55%)
-          `,
-          filter: 'blur(52px)',
-        }}
-      />
+      {/* ── Cloud 1: top-left blob, gradient bright on its upper-left edge only ── */}
+      <div aria-hidden="true" style={{
+        position: 'absolute', top: '-10%', left: '-5%',
+        width: '52%', height: '48%', pointerEvents: 'none',
+        borderRadius: '50% 60% 40% 55% / 55% 45% 65% 40%',
+        background: `linear-gradient(145deg, rgba(${glow},0.58) 0%, rgba(${glow},0.24) 38%, transparent 62%)`,
+        filter: 'blur(20px)',
+      }} />
 
-      {/* ── Bottom organic wave forms ── */}
-      <span aria-hidden="true" style={{
-        position: 'absolute', bottom: '-8%', left: '5%',
-        width: '65%', height: '38%', borderRadius: '50% 50% 0 0', pointerEvents: 'none',
-        background: `radial-gradient(ellipse at center bottom, rgba(${glow},0.11), transparent 70%)`,
+      {/* ── Cloud 2: right blob, gradient bright on its upper-right edge only ── */}
+      <div aria-hidden="true" style={{
+        position: 'absolute', top: '18%', right: '-8%',
+        width: '46%', height: '44%', pointerEvents: 'none',
+        borderRadius: '60% 45% 55% 40% / 40% 58% 42% 60%',
+        background: `linear-gradient(-115deg, rgba(${glow},0.52) 0%, rgba(${glow},0.20) 38%, transparent 62%)`,
         filter: 'blur(22px)',
       }} />
-      <span aria-hidden="true" style={{
-        position: 'absolute', bottom: '-14%', left: '28%',
-        width: '58%', height: '42%', borderRadius: '50% 45% 0 0', pointerEvents: 'none',
-        background: `radial-gradient(ellipse at center bottom, rgba(${glow},0.08), transparent 65%)`,
-        filter: 'blur(30px)',
-      }} />
-      <span aria-hidden="true" style={{
-        position: 'absolute', bottom: '-5%', right: '4%',
-        width: '42%', height: '32%', borderRadius: '50% 50% 0 0', pointerEvents: 'none',
-        background: `radial-gradient(ellipse at center bottom, rgba(${glow},0.06), transparent 70%)`,
-        filter: 'blur(20px)',
+
+      {/* ── Cloud 3: bottom blob, gradient bright on its bottom edge only ── */}
+      <div aria-hidden="true" style={{
+        position: 'absolute', bottom: '-14%', left: '20%',
+        width: '54%', height: '42%', pointerEvents: 'none',
+        borderRadius: '55% 45% 30% 30% / 50% 50% 22% 22%',
+        background: `linear-gradient(195deg, transparent 0%, rgba(${glow},0.18) 42%, rgba(${glow},0.50) 82%)`,
+        filter: 'blur(22px)',
       }} />
 
       {/* ── Floating bubble particles ── */}
