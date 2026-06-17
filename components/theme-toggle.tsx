@@ -20,37 +20,28 @@ export function ThemeToggle() {
     setIsDark(dark)
   }
 
-  const seg = (active: boolean) => ({
-    padding: '6px 12px',
-    borderRadius: 999,
-    background: active ? 'var(--accent)' : 'transparent',
-    color: active ? '#fff' : 'var(--text-2)',
+  const activeStyle = (active: boolean): React.CSSProperties => ({
+    background: active ? 'var(--bg-2)' : 'transparent',
+    color: active ? 'var(--text)' : 'var(--text-2)',
+    fontWeight: active ? 500 : 400,
+    boxShadow: active ? '0 1px 3px rgba(0,0,0,0.18)' : 'none',
   })
+
+  const btnCls = 'inline-flex flex-1 items-center justify-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-sans transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]'
 
   return (
     <div
-      className="inline-flex items-center"
-      style={{ gap: 2, padding: 3, borderRadius: 999, background: 'var(--bg-3)', border: '0.5px solid var(--border)' }}
+      role="group"
+      aria-label="Color theme"
+      className="flex items-center w-full gap-[2px] p-[3px] rounded-full bg-[var(--bg-3)] border-[0.5px] border-[var(--border)]"
     >
-      <button
-        type="button"
-        aria-label="Light mode"
-        aria-pressed={!isDark}
-        onClick={() => setTheme(false)}
-        className="inline-flex items-center justify-center transition-colors"
-        style={seg(!isDark)}
-      >
-        <Sun size={15} />
+      <button type="button" aria-label="Light mode" aria-pressed={!isDark} onClick={() => setTheme(false)} className={btnCls} style={activeStyle(!isDark)}>
+        <Sun size={13} />
+        <span>Light</span>
       </button>
-      <button
-        type="button"
-        aria-label="Dark mode"
-        aria-pressed={isDark}
-        onClick={() => setTheme(true)}
-        className="inline-flex items-center justify-center transition-colors"
-        style={seg(isDark)}
-      >
-        <Moon size={15} />
+      <button type="button" aria-label="Dark mode" aria-pressed={isDark} onClick={() => setTheme(true)} className={btnCls} style={activeStyle(isDark)}>
+        <Moon size={13} />
+        <span>Dark</span>
       </button>
     </div>
   )

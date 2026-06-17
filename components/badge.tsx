@@ -1,20 +1,28 @@
-// Bucket-type badges per SPLIT-UI-REDESIGN.md. The "Scheduled" badge is intentionally
-// omitted — its data would require a new contract read, which is out of scope for this
-// styling-only pass. Colors come from the design tokens in globals.css.
+'use client'
+
+import { Zap } from 'lucide-react'
 
 export type BadgeVariant = 'auto-sends' | 'holds' | 'goal'
 
-const VARIANT: Record<BadgeVariant, { label: string; background: string; color: string }> = {
-  'auto-sends': { label: '↗ Auto-sends', background: 'var(--info-bg)',    color: 'var(--info)' },
-  'holds':      { label: 'Holds',        background: 'var(--bg-3)',       color: 'var(--text-2)' },
-  'goal':       { label: '◎ Goal',       background: 'var(--warning-bg)', color: 'var(--warning)' },
-}
-
 export function Badge({ variant }: { variant: BadgeVariant }) {
-  const v = VARIANT[variant]
+  if (variant === 'auto-sends') {
+    return (
+      <span className="badge" style={{ background: 'var(--accent-bg)', color: 'var(--accent)', gap: 4 }}>
+        <Zap size={9} strokeWidth={2.5} />
+        Auto-sends
+      </span>
+    )
+  }
+  if (variant === 'holds') {
+    return (
+      <span className="badge" style={{ background: 'var(--bg-3)', color: 'var(--text-2)' }}>
+        Holds
+      </span>
+    )
+  }
   return (
-    <span className="badge" style={{ background: v.background, color: v.color }}>
-      {v.label}
+    <span className="badge" style={{ background: 'var(--warning-bg)', color: 'var(--warning)' }}>
+      ◎ Goal
     </span>
   )
 }

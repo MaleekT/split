@@ -7,7 +7,7 @@ import { Badge } from './badge'
 import { bucketIconFor } from './bucket-icon'
 import { shortAddress, formatUsdc } from '@/lib/format'
 import { bpsToPCT } from '@/lib/bps'
-import { SquarePen, ArrowDownToLine, CalendarClock, Target } from 'lucide-react'
+import { SquarePen, ArrowDownToLine, CalendarClock, Target, Trash2 } from 'lucide-react'
 
 interface Props {
   bucket:       SplitBucket
@@ -21,22 +21,21 @@ interface Props {
   onDelete:     () => void
 }
 
-// SVG allocation ring with the bucket's category icon centred.
 function Ring({ pct, color, Icon }: { pct: number; color: string; Icon: React.ComponentType<{ size?: number; color?: string }> }) {
-  const r = 32
+  const r = 38
   const circumference = 2 * Math.PI * r
   const dash = Math.min(pct, 100) / 100 * circumference
   return (
-    <div className="relative shrink-0" style={{ width: 80, height: 80 }}>
-      <svg width={80} height={80} viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }} aria-hidden="true">
-        <circle cx="40" cy="40" r={r} fill="none" stroke="var(--bg-3)" strokeWidth="6" />
+    <div className="relative shrink-0" style={{ width: 96, height: 96 }}>
+      <svg width={96} height={96} viewBox="0 0 96 96" style={{ transform: 'rotate(-90deg)' }} aria-hidden="true">
+        <circle cx="48" cy="48" r={r} fill="none" stroke="var(--bg-3)" strokeWidth="7" />
         <circle
-          cx="40" cy="40" r={r} fill="none" stroke={color} strokeWidth="6" strokeLinecap="round"
+          cx="48" cy="48" r={r} fill="none" stroke={color} strokeWidth="7" strokeLinecap="round"
           strokeDasharray={`${dash} ${circumference}`} style={{ transition: 'stroke-dasharray 0.5s ease' }}
         />
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
-        <Icon size={24} color={color} />
+        <Icon size={28} color={color} />
       </div>
     </div>
   )
@@ -63,11 +62,22 @@ export function BucketCard({ bucket, goal, routedTotal, iconSlug, onEdit, onWith
     ? progressRaw.toFixed(1)
     : String(Math.round(progressRaw))
 
+  const glowRgb = isHold ? '96,165,250' : '29,158,117'
+
   return (
     <article
-      className="flex flex-col transition-colors border-[0.5px] border-[var(--border)] hover:border-[rgba(29,158,117,0.3)]"
-      style={{ background: 'var(--bg-2)', borderRadius: 14, padding: 18 }}
+      className="relative flex flex-col transition-colors"
+      style={{
+        background: `radial-gradient(ellipse at 35% 62%, rgba(${glowRgb},0.11) 0%, transparent 62%), var(--bg-2)`,
+        border: `0.5px solid rgba(${glowRgb},0.28)`,
+        borderRadius: 14,
+        padding: 18,
+      }}
     >
+      {/* Decorative ghost rings */}
+      <span aria-hidden="true" style={{ position: 'absolute', right: 48, top: '46%', width: 11, height: 11, borderRadius: 999, border: `1px solid rgba(${glowRgb},0.18)`, pointerEvents: 'none' }} />
+      <span aria-hidden="true" style={{ position: 'absolute', right: 22, top: '60%', width: 7, height: 7, borderRadius: 999, border: `1px solid rgba(${glowRgb},0.10)`, pointerEvents: 'none' }} />
+
       {/* Header: name + badge */}
       <div className="flex items-center justify-between gap-3">
         <h3 className="min-w-0 truncate" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>
@@ -127,9 +137,10 @@ export function BucketCard({ bucket, goal, routedTotal, iconSlug, onEdit, onWith
       <button
         type="button"
         onClick={onDelete}
-        className="rounded-lg transition-colors hover:bg-[var(--danger-bg)]"
+        className="inline-flex items-center justify-center gap-1.5 rounded-lg transition-colors hover:bg-[var(--danger-bg)]"
         style={{ ...actionLabel, color: 'var(--danger)', marginTop: 6, padding: '6px 0' }}
       >
+        <Trash2 size={12} />
         Delete
       </button>
     </article>

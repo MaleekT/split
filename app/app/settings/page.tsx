@@ -121,12 +121,12 @@ export default function SettingsPage() {
   if (!address) return null
 
   return (
-    <div className="space-y-8 max-w-2xl">
+    <div className="space-y-6">
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-[var(--split-text-primary)]">Buckets</h1>
-          <p className="text-sm text-[var(--split-text-secondary)] mt-0.5">
+          <h1 style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 22, color: 'var(--text)', marginBottom: 4 }}>Buckets</h1>
+          <p style={{ fontSize: 13, color: 'var(--text-2)' }}>
             Define how every deposit is split.
           </p>
         </div>
@@ -135,7 +135,7 @@ export default function SettingsPage() {
           onClick={() => setModal({ kind: 'add' })}
           disabled={buckets.length >= 10}
           title={buckets.length >= 10 ? 'Maximum of 10 buckets reached' : undefined}
-          className="shrink-0 px-4 py-2 rounded-xl text-sm font-semibold text-white bg-[#111110] hover:opacity-85 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+          className="shrink-0 inline-flex items-center gap-1 px-4 py-2 rounded-xl text-sm font-semibold font-sans text-[var(--accent)] bg-[var(--accent-bg)] border-[0.5px] border-[var(--accent)] hover:shadow-[0_0_0_2px_var(--accent)] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
         >
           + Add bucket
         </button>
@@ -143,7 +143,7 @@ export default function SettingsPage() {
 
       {/* ── BPS allocation indicator ── */}
       {buckets.length > 0 && (
-        <div className="rounded-2xl bg-[var(--split-bg-primary)] border border-[var(--split-border)] p-5">
+        <div style={{ background: 'var(--bg-2)', border: '0.5px solid var(--border)', borderRadius: 14, padding: '14px 20px' }}>
           <BpsIndicator buckets={buckets} />
         </div>
       )}

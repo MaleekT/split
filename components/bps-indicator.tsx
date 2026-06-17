@@ -32,7 +32,7 @@ export function BpsIndicator({ buckets = [] }: BpsIndicatorProps) {
         </span>
       </div>
 
-      <div className="h-1.5 rounded-full bg-[rgba(0,0,0,0.06)] overflow-hidden">
+      <div className="h-2.5 rounded-full bg-[var(--bg-3)] overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-300 ${barCls}`}
           style={{ width: `${pct}%` }}
