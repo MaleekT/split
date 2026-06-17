@@ -322,7 +322,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ── RIGHT COLUMN ── */}
-        <div className="flex flex-col gap-5 min-w-0">
+        <div className="flex flex-col gap-5 min-w-0 lg:sticky lg:top-6 lg:self-start lg:max-h-[calc(100vh-48px)]">
           <ActivityFeed address={address} compact />
           <InsightsCard address={address} />
         </div>
