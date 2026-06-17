@@ -62,7 +62,7 @@ const PAGE_CSS = `
   -webkit-backdrop-filter:blur(12px);
 }
 .sp-nav-logo {
-  font-size:18px; font-weight:700; letter-spacing:-0.03em;
+  flex:1; font-size:18px; font-weight:700; letter-spacing:-0.03em;
   color:var(--text); display:flex; align-items:center; gap:8px; text-decoration:none;
 }
 .sp-nav-logo .dot { color:var(--accent); }
@@ -73,7 +73,7 @@ const PAGE_CSS = `
   font-family:inherit;
 }
 .sp-nav-btn:hover { color:var(--accent); }
-.sp-nav-right { display:flex; align-items:center; gap:10px; }
+.sp-nav-right { flex:1; display:flex; align-items:center; justify-content:flex-end; gap:10px; }
 .sp-btn-ghost {
   background:none; border:0.5px solid var(--border);
   border-radius:8px; padding:6px 14px; font-size:13px; font-weight:500;
@@ -82,10 +82,11 @@ const PAGE_CSS = `
 }
 .sp-btn-ghost:hover { border-color:var(--accent); color:var(--accent); }
 .sp-btn-cta {
-  background:var(--accent); color:#fff; border:none; border-radius:8px;
+  background:linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%);
+  color:#fff; border:none; border-radius:8px;
   padding:7px 16px; font-size:13px; font-weight:600; cursor:pointer;
   text-decoration:none; display:inline-flex; align-items:center;
-  transition:opacity 0.15s, transform 0.15s;
+  white-space:nowrap; transition:opacity 0.15s, transform 0.15s;
 }
 .sp-btn-cta:hover { opacity:0.85; transform:translateY(-1px); }
 .sp-ham {
@@ -164,10 +165,11 @@ const PAGE_CSS = `
   opacity:0; animation:fadeSlideUp 0.7s 0.24s ease forwards;
 }
 .sp-btn-hero-p {
-  background:var(--accent); color:#fff; border:none; border-radius:10px;
+  background:linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%);
+  color:#fff; border:none; border-radius:10px;
   padding:13px 28px; font-size:15px; font-weight:600; cursor:pointer;
   text-decoration:none; display:inline-flex; align-items:center;
-  transition:opacity 0.15s, transform 0.15s; font-family:inherit;
+  white-space:nowrap; transition:opacity 0.15s, transform 0.15s; font-family:inherit;
 }
 .sp-btn-hero-p:hover { opacity:0.85; transform:translateY(-1px); }
 .sp-btn-hero-s {
