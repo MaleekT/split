@@ -148,7 +148,7 @@ const PAGE_CSS = `
 /* Phase 2: gradient first line */
 .sp-h-grad {
   display:block;
-  margin-bottom:24px;
+  margin-bottom:16px;
   background:linear-gradient(135deg, var(--sp-grad-from) 30%, var(--accent) 100%);
   -webkit-background-clip:text; -webkit-text-fill-color:transparent;
   background-clip:text;
@@ -764,8 +764,8 @@ export default function SplitHomePage() {
             <div>
               <h1 className="sp-hero-h">
                 {/* Phase 2: gradient first line */}
-                <span className="sp-h-grad">One pay link.</span>
-                <span className="g">Your money routes itself.</span>
+                <span className="sp-h-grad">Get paid once.</span>
+                <span className="g">Your money sorts itself.</span>
               </h1>
               <p className="sp-hero-sub">
                 Define buckets for savings, expenses, and goals. Share your Split link.
@@ -896,7 +896,7 @@ export default function SplitHomePage() {
             {/* Brand column */}
             <div>
               <div className="sp-f-logo"><SplitLogo size={52} /></div>
-              <div className="sp-f-tag">Set your rules once.<br />Every USDC you earn splits itself.</div>
+              <div className="sp-f-tag">Your money sorts itself.</div>
             </div>
 
             {/* //LEARN */}
