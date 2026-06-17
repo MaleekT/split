@@ -409,7 +409,7 @@ const PAGE_CSS = `
 .sp-f-network a:hover { opacity:0.8; }
 .sp-f-open-btn {
   display:flex; align-items:center; justify-content:center;
-  background:var(--accent); color:#fff; font-size:15px; font-weight:700;
+  background:linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%); color:#fff; font-size:15px; font-weight:700;
   padding:14px 20px; border-radius:10px; text-decoration:none;
   border:none; cursor:pointer; width:100%; transition:opacity 0.15s;
 }

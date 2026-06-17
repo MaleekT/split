@@ -244,7 +244,7 @@ export default function DashboardPage() {
                 disabled={depositStep !== 'idle' || !parsedDepositAmount || noBuckets}
                 title={noBuckets ? 'Add a bucket before depositing' : undefined}
                 className="shrink-0 inline-flex items-center gap-1.5 text-white hover:opacity-[0.88] active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ background: 'var(--accent)', borderRadius: 10, padding: '10px 18px', fontSize: 13, fontWeight: 600 }}
+                style={{ background: 'linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%)', borderRadius: 10, padding: '10px 18px', fontSize: 13, fontWeight: 600 }}
               >
                 <Download size={15} /> {depositLabel}
               </button>

@@ -60,7 +60,7 @@ function UserBlock() {
               type="button"
               onClick={openConnectModal}
               className="w-full text-white transition-opacity hover:opacity-90"
-              style={{ background: 'var(--accent)', borderRadius: 10, padding: '10px 12px', fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13 }}
+              style={{ background: 'linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%)', borderRadius: 10, padding: '10px 12px', fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13 }}
             >
               Connect wallet
             </button>

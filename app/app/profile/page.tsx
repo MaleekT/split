@@ -149,7 +149,7 @@ const PAGE_CSS = `
 .pr-form-error { font-size:12px; color:#EF4444; margin-top:6px; }
 .pr-save-btn {
   width:100%; padding:11px; border-radius:10px; border:none;
-  background:var(--accent); color:#fff; font-size:14px; font-weight:600;
+  background:linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%); color:#fff; font-size:14px; font-weight:600;
   cursor:pointer; transition:opacity 0.15s; margin-top:10px; font-family:inherit;
 }
 .pr-save-btn:hover:not(:disabled) { opacity:0.85; }
@@ -274,7 +274,7 @@ const PAGE_CSS = `
 .pr-mini-currency { font-size:12px; color:var(--text-3); font-weight:500; }
 .pr-mini-pay-btn {
   width:100%; padding:10px; border-radius:10px; border:none;
-  background:var(--accent); color:#fff; font-size:13px; font-weight:600;
+  background:linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%); color:#fff; font-size:13px; font-weight:600;
   cursor:default; font-family:inherit; opacity:0.85;
 }
 
