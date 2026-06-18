@@ -180,11 +180,18 @@ const PAGE_CSS = `
 }
 .sp-btn-hero-s:hover { border-color:var(--accent); color:var(--accent); }
 .sp-hero-demo {
-  background:linear-gradient(180deg,rgba(255,255,255,0.04) 0%,rgba(255,255,255,0.01) 100%);
-  border:1px solid rgba(255,255,255,0.08);
-  backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+  background:var(--bg-2);
+  border:0.5px solid var(--border);
   border-radius:16px; padding:20px;
   opacity:0; animation:fadeSlideRight 0.8s 0.3s ease forwards;
+}
+@supports (backdrop-filter:blur(1px)) {
+  .sp-hero-demo {
+    background:var(--sp-glass-bg);
+    backdrop-filter:blur(18px);
+    -webkit-backdrop-filter:blur(18px);
+    border-color:var(--sp-glass-border);
+  }
 }
 .sp-demo-label {
   font-size:11px; font-weight:600; letter-spacing:0.1em;
@@ -192,10 +199,15 @@ const PAGE_CSS = `
 }
 .sp-demo-cards { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 .sp-bc {
-  background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01));
-  border:1px solid rgba(255,255,255,0.08);
-  backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+  background:var(--bg);
+  border:0.5px solid var(--border);
   border-radius:12px; padding:16px;
+}
+@supports (backdrop-filter:blur(1px)) {
+  .sp-bc {
+    background:var(--sp-glass-card-bg);
+    border-color:var(--sp-glass-border);
+  }
 }
 .sp-trust-row { display:none; }
 .sp-bc-name { font-size:13px; font-weight:600; color:var(--text); }
@@ -458,7 +470,8 @@ const PAGE_CSS = `
   .sp-btn-hero-s { width:100%; height:52px; border-radius:14px; display:flex; justify-content:center; align-items:center; }
   .sp-trust-row { display:flex; flex-wrap:wrap; gap:14px; margin-top:16px; }
   .sp-trust-row span { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:500; color:var(--accent); }
-  .sp-hero-demo { margin-top:28px; }
+  .sp-hero-demo { margin-top:28px; background:linear-gradient(180deg,rgba(255,255,255,0.04) 0%,rgba(255,255,255,0.01) 100%); border:1px solid rgba(255,255,255,0.08); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); }
+  .sp-bc { background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01)); border:1px solid rgba(255,255,255,0.08); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); }
 }
 @media(max-width:520px){
   .sp-tl-item { grid-template-columns:40px 0 1fr; gap:0 12px; }
