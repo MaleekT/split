@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import {
   Layers, Link as LinkIcon, ArrowDownToLine, GitBranch,
-  ArrowUpRight, Wallet, Target, CalendarClock, Menu, X, Sun, Moon,
+  ArrowUpRight, Wallet, Target, CalendarClock, Menu, X, Sun, Moon, CheckCircle2,
 } from 'lucide-react'
 import { SplitLogo } from '@/components/brand/logo'
 import { ThemeToggle } from '@/components/theme-toggle'
@@ -180,18 +180,11 @@ const PAGE_CSS = `
 }
 .sp-btn-hero-s:hover { border-color:var(--accent); color:var(--accent); }
 .sp-hero-demo {
-  background:var(--bg-2);
-  border:0.5px solid var(--border);
+  background:linear-gradient(180deg,rgba(255,255,255,0.04) 0%,rgba(255,255,255,0.01) 100%);
+  border:1px solid rgba(255,255,255,0.08);
+  backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
   border-radius:16px; padding:20px;
   opacity:0; animation:fadeSlideRight 0.8s 0.3s ease forwards;
-}
-@supports (backdrop-filter:blur(1px)) {
-  .sp-hero-demo {
-    background:var(--sp-glass-bg);
-    backdrop-filter:blur(18px);
-    -webkit-backdrop-filter:blur(18px);
-    border-color:var(--sp-glass-border);
-  }
 }
 .sp-demo-label {
   font-size:11px; font-weight:600; letter-spacing:0.1em;
@@ -199,16 +192,12 @@ const PAGE_CSS = `
 }
 .sp-demo-cards { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 .sp-bc {
-  background:var(--bg);
-  border:0.5px solid var(--border);
+  background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01));
+  border:1px solid rgba(255,255,255,0.08);
+  backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
   border-radius:12px; padding:16px;
 }
-@supports (backdrop-filter:blur(1px)) {
-  .sp-bc {
-    background:var(--sp-glass-card-bg);
-    border-color:var(--sp-glass-border);
-  }
-}
+.sp-trust-row { display:none; }
 .sp-bc-name { font-size:13px; font-weight:600; color:var(--text); }
 .sp-badge {
   display:inline-block; font-size:11px; font-weight:500;
@@ -463,6 +452,13 @@ const PAGE_CSS = `
   .sp-nav { padding:0 20px; }
   .sp-hero-grid { padding:56px 20px; }
   .sp-hero-bg-coin { right:-160px; }
+  .sp-hero-h { font-size:38px; line-height:1.05; }
+  .sp-hero-btns { flex-direction:column; gap:12px; margin-top:24px; }
+  .sp-btn-hero-p { width:100%; height:52px; border-radius:14px; justify-content:center; font-size:16px; }
+  .sp-btn-hero-s { width:100%; height:52px; border-radius:14px; display:flex; justify-content:center; align-items:center; }
+  .sp-trust-row { display:flex; flex-wrap:wrap; gap:14px; margin-top:16px; }
+  .sp-trust-row span { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:500; color:var(--accent); }
+  .sp-hero-demo { margin-top:28px; }
 }
 @media(max-width:520px){
   .sp-tl-item { grid-template-columns:40px 0 1fr; gap:0 12px; }
@@ -801,6 +797,11 @@ export default function SplitHomePage() {
               <div className="sp-hero-btns">
                 <Link href="/app" className="sp-btn-hero-p">Open App →</Link>
                 <button className="sp-btn-hero-s" onClick={() => scrollTo('how-it-works')}>See how it works ↓</button>
+              </div>
+              <div className="sp-trust-row">
+                <span><CheckCircle2 size={14} />No spreadsheets</span>
+                <span><CheckCircle2 size={14} />No transfers</span>
+                <span><CheckCircle2 size={14} />Auto-splits deposits</span>
               </div>
             </div>
             <div>
