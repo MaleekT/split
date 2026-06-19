@@ -55,7 +55,7 @@ function TxChip({ hash }: { hash: string }) {
       href={`https://testnet.arcscan.app/tx/${hash}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center font-mono transition-colors hover:text-[var(--accent)]"
+      className="inline-flex items-center font-mono transition-colors hover:bg-[var(--bg-2)] hover:text-[var(--text-1)]"
       style={{ fontSize: 10, color: 'var(--text-2)', background: 'var(--bg-3)', borderRadius: 6, padding: '2px 6px', marginTop: 4, textDecoration: 'underline', textUnderlineOffset: 2 }}
     >
       Tx: {hash.slice(0, 6)}…{hash.slice(-4)}
@@ -155,7 +155,7 @@ export function ActivityFeed({ address, compact = false }: Props) {
                   </p>
                   {sub && <p style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: 'var(--text-2)', marginTop: 2 }}>{sub}</p>}
                   {item.memoText && (
-                    <p style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: 'var(--accent)', fontStyle: 'italic', marginTop: 2 }}>
+                    <p style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, color: 'var(--accent)', fontStyle: 'italic', marginTop: 3 }}>
                       {item.memoText}
                     </p>
                   )}
