@@ -133,14 +133,9 @@ export function PayForm({ recipientAddress, displayName }: Props) {
       // ── Step 2: depositFor (wrapped in Memo if note provided) ──
       setStep('sending')
       const memoArgs = buildDepositForMemo(recipientAddress, amount, noteStr)
-      const sendTx = await writeContractAsync(
-        memoArgs ?? {
-          address:      contractAddress,
-          abi:          splitAbi,
-          functionName: 'depositFor',
-          args:         [recipientAddress, amount],
-        }
-      )
+      const sendTx = memoArgs
+        ? await writeContractAsync(memoArgs)
+        : await writeContractAsync({ address: contractAddress, abi: splitAbi, functionName: 'depositFor', args: [recipientAddress, amount] })
       await publicClient.waitForTransactionReceipt({
         hash:            sendTx,
         pollingInterval: 500,

@@ -156,11 +156,9 @@ export default function DashboardPage() {
       // ── Step 2: deposit (wrapped in Memo if note provided) ──
       setDepositStep('depositing')
       const memoArgs = buildDepositMemo(amount, noteStr)
-      const depositTx = await writeContractAsync(
-        memoArgs
-          ? { ...memoArgs, chainId: arcTestnet.id }
-          : { address: contractAddress, abi: splitAbi, functionName: 'deposit', args: [amount], chainId: arcTestnet.id }
-      )
+      const depositTx = memoArgs
+        ? await writeContractAsync({ ...memoArgs, chainId: arcTestnet.id })
+        : await writeContractAsync({ address: contractAddress, abi: splitAbi, functionName: 'deposit', args: [amount], chainId: arcTestnet.id })
       setPendingTxHash(depositTx)
       await waitForReceiptCapped(depositTx)
 
