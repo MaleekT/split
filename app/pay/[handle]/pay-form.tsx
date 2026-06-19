@@ -233,7 +233,7 @@ export function PayForm({ recipientAddress, displayName }: Props) {
           </a>
           <button type="button" onClick={() => { setSentTxHash(null); setSentAmount(null) }}
             className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16C784]"
-            style={{ width: '100%', height: 60, borderRadius: 18, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#12D18E 0%,#16C784 50%,#18B978 100%)', color: '#fff', fontSize: 16, fontWeight: 600, boxShadow: `0px 10px 24px ${ACCENT_GLOW}` }}>
+            style={{ width: '100%', height: 60, borderRadius: 18, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#1ADE97 0%,#16C784 100%)', color: '#fff', fontSize: 16, fontWeight: 600, boxShadow: `0px 10px 24px ${ACCENT_GLOW}` }}>
             Send again
           </button>
         </div>
@@ -243,7 +243,7 @@ export function PayForm({ recipientAddress, displayName }: Props) {
 
   // ── Form ───────────────────────────────────────────────────────────────────────
   const cardBg   = 'linear-gradient(180deg,rgba(18,20,32,.95) 0%,rgba(11,13,22,.98) 100%)'
-  const btnBg    = isDisabled ? 'rgba(255,255,255,.06)' : 'linear-gradient(135deg,#12D18E 0%,#16C784 50%,#18B978 100%)'
+  const btnBg    = isDisabled ? 'rgba(255,255,255,.06)' : 'linear-gradient(135deg,#1ADE97 0%,#16C784 100%)'
   const btnColor = isDisabled ? 'rgba(255,255,255,.25)' : '#fff'
 
   return (
@@ -373,7 +373,7 @@ export function PayForm({ recipientAddress, displayName }: Props) {
                   className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16C784] focus-visible:ring-offset-1 focus-visible:ring-offset-[#0B0D16]"
                   onMouseEnter={(e) => { if (!isDisabled) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.filter = 'brightness(1.05)' } }}
                   onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.filter = '' }}
-                  style={{ width: '100%', height: 48, borderRadius: 14, border: 'none', cursor: isDisabled ? 'not-allowed' : 'pointer', background: btnBg, color: btnColor, fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: isDisabled ? 'none' : `0px 8px 20px ${ACCENT_GLOW}`, transition: 'transform .15s ease, filter .15s ease' }}
+                  style={{ width: '100%', height: 54, borderRadius: 999, border: 'none', cursor: isDisabled ? 'not-allowed' : 'pointer', background: btnBg, color: btnColor, fontSize: 15, fontWeight: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: isDisabled ? 'none' : `0px 8px 20px ${ACCENT_GLOW}`, transition: 'transform .15s ease, filter .15s ease' }}
                 >
                   {step === 'idle' ? <IconSend /> : <IconSpinner />}
                   {btnLabel}
