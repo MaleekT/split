@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server'
 import { decodeEventLog, getAddress } from 'viem'
 import type { Hex, Log } from 'viem'
 import { publicClient } from '@/lib/arc'
-import { getSplitContract, splitAbi } from '@/lib/contracts'
+import { getSplitContract, splitAbi, MEMO_CONTRACT, memoAbi } from '@/lib/contracts'
+import { decodeMemoText } from '@/lib/memos'
 import { supabase } from '@/lib/supabase'
 
 // Arc produces ~0.48 s blocks; 1 000 blocks ≈ 8 min — safe for a 2-min cron.
@@ -101,6 +102,36 @@ export async function GET(req: Request): Promise<NextResponse> {
   // 3. Decode all logs synchronously — no network calls here
   const { activityRows, scheduleFetches, schedCancels, decodeErrors } = classifyLogs(logs)
 
+  // 3.5 Scan MEMO_CONTRACT for Memo events in the same block range
+  //     Builds a txHash→{memoText,memoId} map used to enrich activity rows below.
+  const memoByTx = new Map<string, { memoText: string; memoId: string }>()
+  if (activityRows.length > 0) {
+    const memoLogs = await publicClient.getLogs({
+      address:   MEMO_CONTRACT,
+      fromBlock: BigInt(fromBlock),
+      toBlock:   BigInt(toBlock),
+    })
+    for (const log of memoLogs) {
+      if (!log.transactionHash) continue
+      try {
+        const decoded = decodeEventLog({ abi: memoAbi, data: log.data, topics: log.topics as [Hex, ...Hex[]] })
+        if (decoded.eventName !== 'Memo') continue
+        if (getAddress((decoded.args as { target: `0x${string}` }).target) !== contractAddress) continue
+        const text = decodeMemoText((decoded.args as { memo: `0x${string}` }).memo)
+        if (!text) continue
+        memoByTx.set(log.transactionHash, {
+          memoText: text,
+          memoId:   (decoded.args as { memoId: `0x${string}` }).memoId,
+        })
+      } catch { /* skip undecodable log */ }
+    }
+  }
+
+  const enrichedRows = activityRows.map((row) => {
+    const memo = memoByTx.get(row.tx_hash)
+    return { ...row, memo_text: memo?.memoText ?? null, memo_id: memo?.memoId ?? null }
+  })
+
   // 4. Fetch all scheduled-send state in parallel (one RPC call per schedule event)
   const schedResults = await Promise.all(
     scheduleFetches.map(({ user, bucketId }) =>
@@ -114,10 +145,10 @@ export async function GET(req: Request): Promise<NextResponse> {
   //    On retry, the unique constraints (tx_hash+log_index, user_address+bucket_id) ensure
   //    already-written rows are skipped cleanly.
 
-  if (activityRows.length > 0) {
+  if (enrichedRows.length > 0) {
     const { error } = await supabase
       .from('activity')
-      .upsert(activityRows, { onConflict: 'tx_hash,log_index', ignoreDuplicates: true })
+      .upsert(enrichedRows, { onConflict: 'tx_hash,log_index', ignoreDuplicates: true })
     if (error) {
       return NextResponse.json({ error: `activity upsert: ${error.message}` }, { status: 500 })
     }
@@ -159,7 +190,8 @@ export async function GET(req: Request): Promise<NextResponse> {
     from:         fromBlock,
     to:           toBlock,
     logs:         logs.length,
-    activity:     activityRows.length,
+    activity:     enrichedRows.length,
+    memos:        memoByTx.size,
     schedUpserts: schedUpserts.length,
     schedCancels: schedCancels.length,
     decodeErrors,

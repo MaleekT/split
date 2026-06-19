@@ -5,6 +5,7 @@ import { parseUnits } from 'viem'
 import { useAccount, useReadContracts, useWriteContract, useChainId, useSwitchChain } from 'wagmi'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getSplitContract, splitAbi, erc20Abi, USDC, type SplitBucket } from '@/lib/contracts'
+import { buildDepositMemo } from '@/lib/memos'
 import { publicClient } from '@/lib/arc'
 import { arcTestnet } from '@/lib/chain'
 import { parseSplitError } from '@/lib/errors'
@@ -95,6 +96,7 @@ export default function DashboardPage() {
   const totalBal  = buckets.reduce((sum, b) => sum + b.balance, 0n)
 
   const [depositStr, setDepositStr]     = useState('')
+  const [noteStr, setNoteStr]           = useState('')
   const [depositStep, setDepositStep]   = useState<'idle' | 'switching' | 'approving' | 'depositing'>('idle')
   const [depositError, setDepositError] = useState<string | null>(null)
   const [pendingTxHash, setPendingTxHash] = useState<`0x${string}` | null>(null)
@@ -151,19 +153,19 @@ export default function DashboardPage() {
         await waitForReceiptCapped(approveTx)
       }
 
-      // ── Step 2: deposit ──
+      // ── Step 2: deposit (wrapped in Memo if note provided) ──
       setDepositStep('depositing')
-      const depositTx = await writeContractAsync({
-        address:      contractAddress,
-        abi:          splitAbi,
-        functionName: 'deposit',
-        args:         [amount],
-        chainId:      arcTestnet.id,
-      })
+      const memoArgs = buildDepositMemo(amount, noteStr)
+      const depositTx = await writeContractAsync(
+        memoArgs
+          ? { ...memoArgs, chainId: arcTestnet.id }
+          : { address: contractAddress, abi: splitAbi, functionName: 'deposit', args: [amount], chainId: arcTestnet.id }
+      )
       setPendingTxHash(depositTx)
       await waitForReceiptCapped(depositTx)
 
       setDepositStr('')
+      setNoteStr('')
 
       // address is always defined here — guarded by the `if (!address) return null` above
       await Promise.allSettled([
@@ -227,27 +229,37 @@ export default function DashboardPage() {
             </div>
 
             {/* Deposit row */}
-            <form onSubmit={handleDeposit} className="relative flex gap-2" style={{ zIndex: 1, marginTop: 20 }}>
+            <form onSubmit={handleDeposit} className="relative flex flex-col gap-2" style={{ zIndex: 1, marginTop: 20 }}>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min="0.000001"
+                  step="0.000001"
+                  placeholder="Amount to deposit"
+                  value={depositStr}
+                  onChange={(e) => setDepositStr(e.target.value)}
+                  className="flex-1 font-mono focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                  style={{ background: 'var(--bg-3)', border: '0.5px solid var(--border)', borderRadius: 10, padding: '10px 14px', fontSize: 14, color: 'var(--text)' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleDeposit()}
+                  disabled={depositStep !== 'idle' || !parsedDepositAmount || noBuckets}
+                  title={noBuckets ? 'Add a bucket before depositing' : undefined}
+                  className="shrink-0 inline-flex items-center gap-1.5 text-white hover:opacity-[0.88] active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ background: 'linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%)', borderRadius: 10, padding: '10px 18px', fontSize: 13, fontWeight: 600 }}
+                >
+                  <Download size={15} /> {depositLabel}
+                </button>
+              </div>
               <input
-                type="number"
-                min="0.000001"
-                step="0.000001"
-                placeholder="Amount to deposit"
-                value={depositStr}
-                onChange={(e) => setDepositStr(e.target.value)}
-                className="flex-1 font-mono focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
-                style={{ background: 'var(--bg-3)', border: '0.5px solid var(--border)', borderRadius: 10, padding: '10px 14px', fontSize: 14, color: 'var(--text)' }}
+                type="text"
+                placeholder="Add a note (optional) — invoice ref, project name…"
+                value={noteStr}
+                onChange={(e) => setNoteStr(e.target.value)}
+                className="w-full font-mono focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                style={{ background: 'var(--bg-3)', border: '0.5px solid var(--border)', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: 'var(--text)' }}
               />
-              <button
-                type="button"
-                onClick={() => void handleDeposit()}
-                disabled={depositStep !== 'idle' || !parsedDepositAmount || noBuckets}
-                title={noBuckets ? 'Add a bucket before depositing' : undefined}
-                className="shrink-0 inline-flex items-center gap-1.5 text-white hover:opacity-[0.88] active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ background: 'linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%)', borderRadius: 10, padding: '10px 18px', fontSize: 13, fontWeight: 600 }}
-              >
-                <Download size={15} /> {depositLabel}
-              </button>
             </form>
 
             {noBuckets && (

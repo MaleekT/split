@@ -1,10 +1,10 @@
 import 'server-only'
 import { NextResponse } from 'next/server'
-import { createWalletClient, http, getAddress } from 'viem'
+import { createWalletClient, http, getAddress, encodeFunctionData, keccak256, toHex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { arcTestnet } from '@/lib/chain'
 import { publicClient } from '@/lib/arc'
-import { getSplitContract, splitAbi } from '@/lib/contracts'
+import { getSplitContract, splitAbi, MEMO_CONTRACT, memoAbi } from '@/lib/contracts'
 import { supabase } from '@/lib/supabase'
 
 // Arc produces ~0.48 s blocks; 5 sends × ~1.5 s each ≈ 7.5 s — within Vercel's 10 s limit.
@@ -110,11 +110,22 @@ export async function GET(req: Request): Promise<NextResponse> {
     try {
       // writeContract simulates via eth_call before broadcasting; TooEarly or BucketNotFound
       // reverts here (no gas spent) if contract state changed since the Supabase query.
-      const hash = await walletClient.writeContract({
-        address:      contractAddress,
+      const innerData = encodeFunctionData({
         abi:          splitAbi,
         functionName: 'executeScheduledSend',
         args:         [user, bucketId],
+      })
+      const memoNote = `Scheduled send — bucket ${bucketIdNum} — ${new Date().toISOString().slice(0, 10)}`
+      const hash = await walletClient.writeContract({
+        address:      MEMO_CONTRACT,
+        abi:          memoAbi,
+        functionName: 'memo',
+        args:         [
+          contractAddress,
+          innerData,
+          keccak256(toHex(`scheduled-${bucketIdNum}-${Date.now()}`)),
+          toHex(memoNote),
+        ],
       })
 
       const receipt = await publicClient.waitForTransactionReceipt({

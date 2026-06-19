@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server'
 import { isAddress, getAddress, decodeEventLog, pad, numberToHex } from 'viem'
 import type { Hex } from 'viem'
 import { publicClient } from '@/lib/arc'
-import { getSplitContract, splitAbi, ZERO_ADDRESS, type SplitBucket } from '@/lib/contracts'
+import { getSplitContract, splitAbi, ZERO_ADDRESS, MEMO_CONTRACT, memoAbi, type SplitBucket } from '@/lib/contracts'
+import { decodeMemoText } from '@/lib/memos'
 import { supabase } from '@/lib/supabase'
 import { shortAddress } from '@/lib/format'
 
@@ -40,9 +41,10 @@ type ActivityItem = {
   amountRaw: string
   txHash: string
   timestamp: number
+  memoText?: string
 }
 
-type CacheEntry = { events: RawEvent[]; lastBlock: bigint; blockTimes: Map<string, number> }
+type CacheEntry = { events: RawEvent[]; lastBlock: bigint; blockTimes: Map<string, number>; memoByTx: Map<string, string> }
 const cache = new Map<string, CacheEntry>()
 const MAX_CACHE_ENTRIES = 500
 
@@ -129,6 +131,47 @@ async function scanUserEvents(
   return out
 }
 
+async function scanMemoEvents(
+  fromBlock: bigint,
+  toBlock: bigint,
+  depositTxHashes: Set<string>,
+): Promise<Map<string, string>> {
+  if (depositTxHashes.size === 0) return new Map()
+
+  const splitTopic = pad(getSplitContract().toLowerCase() as `0x${string}`).toLowerCase() as Hex
+
+  const ranges: Array<[bigint, bigint]> = []
+  for (let from = fromBlock; from <= toBlock; from += BLOCK_WINDOW) {
+    const end = from + BLOCK_WINDOW - 1n
+    ranges.push([from, end > toBlock ? toBlock : end])
+  }
+
+  const memoByTx = new Map<string, string>()
+  for (let i = 0; i < ranges.length; i += CONCURRENCY) {
+    const batch = ranges.slice(i, i + CONCURRENCY)
+    const results = await Promise.all(
+      batch.map(([from, to]) =>
+        publicClient.request({
+          method: 'eth_getLogs',
+          params: [{ address: MEMO_CONTRACT, topics: [null, null, splitTopic], fromBlock: numberToHex(from), toBlock: numberToHex(to) }],
+        }),
+      ),
+    )
+    for (const logs of results) {
+      for (const log of logs) {
+        if (!log.transactionHash || !depositTxHashes.has(log.transactionHash)) continue
+        try {
+          const decoded = decodeEventLog({ abi: memoAbi, data: log.data, topics: log.topics as [Hex, ...Hex[]] })
+          if (decoded.eventName !== 'Memo') continue
+          const text = decodeMemoText((decoded.args as { memo: `0x${string}` }).memo)
+          if (text) memoByTx.set(log.transactionHash, text)
+        } catch { /* skip undecodable log */ }
+      }
+    }
+  }
+  return memoByTx
+}
+
 async function resolveBucketNames(contract: `0x${string}`, user: `0x${string}`): Promise<Map<string, string>> {
   const names = new Map<string, string>()
   try {
@@ -177,10 +220,19 @@ export async function GET(
     const cached     = cache.get(user)
     const events     = cached ? [...cached.events] : []
     const blockTimes = cached ? new Map(cached.blockTimes) : new Map<string, number>()
+    const memoByTx   = cached?.memoByTx ? new Map(cached.memoByTx) : new Map<string, string>()
     const fromBlock  = cached ? cached.lastBlock + 1n : deployBlock
 
     if (fromBlock <= latest) {
-      events.push(...(await scanUserEvents(contract, user, fromBlock, latest)))
+      const newEvents = await scanUserEvents(contract, user, fromBlock, latest)
+      events.push(...newEvents)
+
+      // Scan MEMO_CONTRACT for notes attached to new deposit transactions.
+      const newDepositTxs = new Set(
+        newEvents.filter((e): e is Extract<RawEvent, { type: 'deposit' }> => e.type === 'deposit').map((e) => e.tx),
+      )
+      const newMemos = await scanMemoEvents(fromBlock, latest, newDepositTxs)
+      for (const [tx, text] of newMemos) memoByTx.set(tx, text)
 
       // Block timestamps (for "2m ago"), fetched once per block and cached.
       const needed = [...new Set(events.map((e) => e.block.toString()))].filter((b) => !blockTimes.has(b))
@@ -195,7 +247,7 @@ export async function GET(
         for (const [b, t] of times) blockTimes.set(b, t)
       }
 
-      setCache(user, { events, lastBlock: latest, blockTimes })
+      setCache(user, { events, lastBlock: latest, blockTimes, memoByTx })
     }
 
     // ── Assemble display items ──
@@ -233,6 +285,7 @@ export async function GET(
           counterparty: payLink ? (handle ? `@${handle}` : shortAddress(e.sender)) : undefined,
           breakdown: splits.map((s) => ({ name: bucketName(s.bucketId), amountRaw: s.share.toString() })),
           amountRaw: e.amount.toString(), txHash: e.tx, timestamp: ts,
+          memoText: memoByTx.get(e.tx),
         })
       } else if (e.type === 'split' && e.destination !== ZERO_ADDRESS) {
         items.push({

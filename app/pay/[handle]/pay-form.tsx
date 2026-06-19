@@ -5,6 +5,7 @@ import { parseUnits, isAddress } from 'viem'
 import { useAccount, useReadContracts, useWriteContract } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { getSplitContract, splitAbi, erc20Abi, USDC, ZERO_ADDRESS, type SplitBucket } from '@/lib/contracts'
+import { buildDepositForMemo } from '@/lib/memos'
 import { publicClient } from '@/lib/arc'
 import { parseSplitError } from '@/lib/errors'
 import { shortAddress, formatUsdc } from '@/lib/format'
@@ -77,6 +78,7 @@ export function PayForm({ recipientAddress, displayName }: Props) {
   const hasNoBuckets     = recipientBuckets.length === 0
 
   const [amountStr, setAmountStr]       = useState('')
+  const [noteStr, setNoteStr]           = useState('')
   const [step, setStep]                 = useState<'idle' | 'approving' | 'sending'>('idle')
   const [error, setError]               = useState<string | null>(null)
   const [sentTxHash, setSentTxHash]     = useState<string | null>(null)
@@ -128,14 +130,17 @@ export function PayForm({ recipientAddress, displayName }: Props) {
         if (!mounted.current) return
       }
 
-      // ── Step 2: depositFor ──
+      // ── Step 2: depositFor (wrapped in Memo if note provided) ──
       setStep('sending')
-      const sendTx = await writeContractAsync({
-        address:      contractAddress,
-        abi:          splitAbi,
-        functionName: 'depositFor',
-        args:         [recipientAddress, amount],
-      })
+      const memoArgs = buildDepositForMemo(recipientAddress, amount, noteStr)
+      const sendTx = await writeContractAsync(
+        memoArgs ?? {
+          address:      contractAddress,
+          abi:          splitAbi,
+          functionName: 'depositFor',
+          args:         [recipientAddress, amount],
+        }
+      )
       await publicClient.waitForTransactionReceipt({
         hash:            sendTx,
         pollingInterval: 500,
@@ -146,6 +151,7 @@ export function PayForm({ recipientAddress, displayName }: Props) {
         setSentTxHash(sendTx)
         setSentAmount(amount)
         setAmountStr('')
+        setNoteStr('')
       }
     } catch (err) {
       let message = 'Something went wrong. Please try again.'
@@ -279,6 +285,23 @@ export function PayForm({ recipientAddress, displayName }: Props) {
                   </button>
                 </p>
               )}
+            </div>
+
+            <div className="space-y-1.5">
+              <label
+                htmlFor="pay-note"
+                className="text-xs font-medium text-[var(--split-text-secondary)]"
+              >
+                Note <span className="font-normal text-[var(--split-text-tertiary)]">(Optional)</span>
+              </label>
+              <input
+                id="pay-note"
+                type="text"
+                placeholder="Invoice #001, project name, or any reference"
+                value={noteStr}
+                onChange={(e) => setNoteStr(e.target.value)}
+                className="w-full rounded-xl border border-[var(--split-border)] bg-[var(--split-bg-secondary)] px-3.5 py-3 text-sm text-[var(--split-text-primary)] placeholder:text-[var(--split-text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--split-accent)] focus:border-transparent transition"
+              />
             </div>
 
             {error && (

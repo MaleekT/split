@@ -22,6 +22,7 @@ interface ActivityItem {
   amountRaw: string
   txHash: string
   timestamp: number
+  memoText?: string
 }
 
 const PURPLE = '#8B5CF6'
@@ -153,6 +154,11 @@ export function ActivityFeed({ address, compact = false }: Props) {
                     )}
                   </p>
                   {sub && <p style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: 'var(--text-2)', marginTop: 2 }}>{sub}</p>}
+                  {item.memoText && (
+                    <p style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic', marginTop: 2 }}>
+                      &ldquo;{item.memoText}&rdquo;
+                    </p>
+                  )}
                   <div><TxChip hash={item.txHash} /></div>
                 </div>
                 <div className="text-right shrink-0">
