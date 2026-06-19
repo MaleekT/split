@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { parseUnits, isAddress, formatUnits } from 'viem'
-import { useAccount, useReadContracts, useWriteContract } from 'wagmi'
+import { useAccount, useReadContracts, useWriteContract, useDisconnect } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { getSplitContract, splitAbi, erc20Abi, USDC, ZERO_ADDRESS, type SplitBucket } from '@/lib/contracts'
 import { buildDepositForMemo } from '@/lib/memos'
@@ -130,6 +130,7 @@ export function PayForm({ recipientAddress, displayName }: Props) {
 
   const { address }            = useAccount()
   const { writeContractAsync } = useWriteContract()
+  const { disconnect }         = useDisconnect()
   const contractAddress        = getSplitContract()
   const mounted                = useRef(true)
   useEffect(() => () => { mounted.current = false }, [])
@@ -271,6 +272,20 @@ export function PayForm({ recipientAddress, displayName }: Props) {
               <IconCopy active={copied} />
             </button>
           </div>
+          {address && (
+            <div style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                onClick={() => disconnect()}
+                className="focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#16C784] rounded"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'rgba(255,255,255,.3)', padding: 0 }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,.6)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,.3)' }}
+              >
+                {shortAddress(address)} · Disconnect
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Card */}
