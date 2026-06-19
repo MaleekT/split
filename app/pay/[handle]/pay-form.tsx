@@ -247,19 +247,19 @@ export function PayForm({ recipientAddress, displayName }: Props) {
   const btnColor = isDisabled ? 'rgba(255,255,255,.25)' : '#fff'
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 24px', background: '#07090F' }}>
-      <div style={{ width: '100%', maxWidth: 480 }}>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', background: '#07090F' }}>
+      <div style={{ width: '100%', maxWidth: 380 }}>
 
         {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'radial-gradient(circle,#0F1B18 0%,#08100E 100%)', border: '1px solid rgba(22,199,132,.25)', boxShadow: '0 0 40px rgba(22,199,132,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: 28, fontWeight: 700, color: ACCENT, userSelect: 'none' }}>
+        <div style={{ textAlign: 'center', marginBottom: 16 }}>
+          <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'radial-gradient(circle,#0F1B18 0%,#08100E 100%)', border: '1px solid rgba(22,199,132,.25)', boxShadow: '0 0 24px rgba(22,199,132,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 20, fontWeight: 700, color: ACCENT, userSelect: 'none' }}>
             {safeDisplayName.charAt(0).toUpperCase()}
           </div>
-          <h1 style={{ fontSize: 48, fontWeight: 700, color: '#fff', margin: '0 0 10px', letterSpacing: '-1px', lineHeight: 1.05 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#fff', margin: '0 0 5px', letterSpacing: '-0.3px', lineHeight: 1.1 }}>
             Pay {safeDisplayName}
           </h1>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 14, color: 'rgba(255,255,255,.45)', fontFamily: 'monospace', letterSpacing: '.02em' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,.45)', fontFamily: 'monospace', letterSpacing: '.02em' }}>
               {shortAddress(recipientAddress)}
             </span>
             <button
@@ -275,15 +275,15 @@ export function PayForm({ recipientAddress, displayName }: Props) {
         </div>
 
         {/* Card */}
-        <div style={{ background: cardBg, border: '1px solid rgba(255,255,255,.08)', borderRadius: 32, boxShadow: '0px 20px 60px rgba(0,0,0,.45)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ background: cardBg, border: '1px solid rgba(255,255,255,.08)', borderRadius: 24, boxShadow: '0px 16px 40px rgba(0,0,0,.45)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', position: 'relative', overflow: 'hidden' }}>
 
           {/* Surface highlight */}
           <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0, background: 'radial-gradient(circle at top left,rgba(255,255,255,.08),transparent 45%)' }} />
 
-          <div style={{ position: 'relative', zIndex: 1, padding: '28px 28px 24px' }}>
+          <div style={{ position: 'relative', zIndex: 1, padding: '20px 20px 16px' }}>
 
             {hasNoBuckets && (
-              <div role="alert" style={{ borderRadius: 16, background: 'rgba(251,191,36,.08)', border: '1px solid rgba(251,191,36,.2)', padding: '12px 16px', marginBottom: 24, fontSize: 13, color: 'rgba(251,191,36,.9)', lineHeight: 1.5 }}>
+              <div role="alert" style={{ borderRadius: 12, background: 'rgba(251,191,36,.08)', border: '1px solid rgba(251,191,36,.2)', padding: '10px 14px', marginBottom: 16, fontSize: 12, color: 'rgba(251,191,36,.9)', lineHeight: 1.5 }}>
                 This recipient hasn&apos;t set up their payment rules yet and cannot receive funds.
               </div>
             )}
@@ -291,13 +291,15 @@ export function PayForm({ recipientAddress, displayName }: Props) {
             <form onSubmit={handleSend} noValidate>
 
               {/* Amount input */}
-              <div style={{ marginBottom: 16 }}>
-                <label htmlFor="pay-amount" style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,.55)', marginBottom: 12, letterSpacing: '.02em' }}>
+              <div style={{ marginBottom: 10 }}>
+                <label htmlFor="pay-amount" style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,.55)', marginBottom: 8, letterSpacing: '.02em' }}>
                   Amount
                 </label>
-                <div style={{ height: 92, borderRadius: 24, background: 'rgba(255,255,255,.02)', border: '1px solid rgba(22,199,132,.45)', boxShadow: 'inset 0 1px 1px rgba(255,255,255,.04)', display: 'flex', alignItems: 'center', padding: '0 16px', gap: 12 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: '50%', border: '1.5px solid rgba(22,199,132,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <IconDollar />
+                <div style={{ height: 60, borderRadius: 16, background: 'rgba(255,255,255,.02)', border: '1px solid rgba(22,199,132,.45)', boxShadow: 'inset 0 1px 1px rgba(255,255,255,.04)', display: 'flex', alignItems: 'center', padding: '0 12px', gap: 10 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid rgba(22,199,132,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={ACCENT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                    </svg>
                   </div>
                   <input
                     id="pay-amount"
@@ -311,10 +313,10 @@ export function PayForm({ recipientAddress, displayName }: Props) {
                     value={amountStr}
                     onChange={(e) => setAmountStr(e.target.value)}
                     className="placeholder:text-white/20 focus:outline-none"
-                    style={{ flex: 1, background: 'transparent', border: 'none', fontSize: 40, fontWeight: 600, color: '#fff', fontFamily: "'Inter','SF Pro Display',system-ui,sans-serif", width: '100%', minWidth: 0 }}
+                    style={{ flex: 1, background: 'transparent', border: 'none', fontSize: 24, fontWeight: 600, color: '#fff', fontFamily: "'Inter','SF Pro Display',system-ui,sans-serif", width: '100%', minWidth: 0 }}
                   />
-                  <div style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.06)', borderRadius: 14, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: '#fff', letterSpacing: '.03em' }}>USDC</span>
+                  <div style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.06)', borderRadius: 10, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#fff', letterSpacing: '.03em' }}>USDC</span>
                     <IconChevronDown />
                   </div>
                 </div>
@@ -322,15 +324,15 @@ export function PayForm({ recipientAddress, displayName }: Props) {
 
               {/* Balance */}
               {address && walletBal > 0n && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
                   <IconWallet />
-                  <span style={{ fontSize: 13, color: 'rgba(255,255,255,.45)' }}>Balance:</span>
+                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,.45)' }}>Balance:</span>
                   {/* formatUnits from viem returns a clean decimal string, safe for parseUnits on submit */}
                   <button
                     type="button"
                     onClick={() => setAmountStr(formatUnits(walletBal, 6))}
                     className="focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#16C784] rounded"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 13, fontWeight: 600, color: ACCENT, fontFamily: 'monospace' }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12, fontWeight: 600, color: ACCENT, fontFamily: 'monospace' }}
                   >
                     {safeFormatUsdc(walletBal)} USDC
                   </button>
@@ -338,11 +340,11 @@ export function PayForm({ recipientAddress, displayName }: Props) {
               )}
 
               {/* Note */}
-              <div style={{ marginBottom: 24 }}>
-                <label htmlFor="pay-note" style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,.55)', marginBottom: 12 }}>
+              <div style={{ marginBottom: 16 }}>
+                <label htmlFor="pay-note" style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,.55)', marginBottom: 8 }}>
                   Note <span style={{ fontWeight: 400, color: 'rgba(255,255,255,.25)' }}>(Optional)</span>
                 </label>
-                <div style={{ background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.06)', borderRadius: 20, display: 'flex', alignItems: 'center', padding: '0 16px', gap: 12, height: 52 }}>
+                <div style={{ background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.06)', borderRadius: 14, display: 'flex', alignItems: 'center', padding: '0 12px', gap: 10, height: 42 }}>
                   <IconDoc />
                   <input
                     id="pay-note"
@@ -351,7 +353,7 @@ export function PayForm({ recipientAddress, displayName }: Props) {
                     value={noteStr}
                     onChange={(e) => setNoteStr(e.target.value)}
                     className="placeholder:text-white/30 focus:outline-none"
-                    style={{ flex: 1, background: 'transparent', border: 'none', fontSize: 14, color: '#fff', width: '100%', minWidth: 0 }}
+                    style={{ flex: 1, background: 'transparent', border: 'none', fontSize: 13, color: '#fff', width: '100%', minWidth: 0 }}
                   />
                 </div>
               </div>
@@ -371,7 +373,7 @@ export function PayForm({ recipientAddress, displayName }: Props) {
                   className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16C784] focus-visible:ring-offset-1 focus-visible:ring-offset-[#0B0D16]"
                   onMouseEnter={(e) => { if (!isDisabled) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.filter = 'brightness(1.05)' } }}
                   onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.filter = '' }}
-                  style={{ width: '100%', height: 72, borderRadius: 22, border: 'none', cursor: isDisabled ? 'not-allowed' : 'pointer', background: btnBg, color: btnColor, fontSize: 18, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, boxShadow: isDisabled ? 'none' : `0px 12px 30px ${ACCENT_GLOW}`, transition: 'transform .15s ease, filter .15s ease' }}
+                  style={{ width: '100%', height: 48, borderRadius: 14, border: 'none', cursor: isDisabled ? 'not-allowed' : 'pointer', background: btnBg, color: btnColor, fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: isDisabled ? 'none' : `0px 8px 20px ${ACCENT_GLOW}`, transition: 'transform .15s ease, filter .15s ease' }}
                 >
                   {step === 'idle' ? <IconSend /> : <IconSpinner />}
                   {btnLabel}
@@ -381,18 +383,18 @@ export function PayForm({ recipientAddress, displayName }: Props) {
           </div>
 
           {/* Trust bar */}
-          <div style={{ borderTop: '1px solid rgba(255,255,255,.06)', background: 'rgba(255,255,255,.02)', padding: '20px 28px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, borderRadius: '0 0 32px 32px', position: 'relative', zIndex: 1 }}>
+          <div style={{ borderTop: '1px solid rgba(255,255,255,.06)', background: 'rgba(255,255,255,.02)', padding: '14px 20px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, borderRadius: '0 0 24px 24px', position: 'relative', zIndex: 1 }}>
             {TRUST_ITEMS.map(({ Icon, title, sub }) => (
               <div key={title} style={{ textAlign: 'center' }}>
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 7 }}><Icon /></div>
-                <p style={{ margin: '0 0 3px', fontSize: 13, fontWeight: 600, color: '#fff', letterSpacing: '-.01em' }}>{title}</p>
-                <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,.35)', lineHeight: 1.4 }}>{sub}</p>
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}><Icon /></div>
+                <p style={{ margin: '0 0 2px', fontSize: 11, fontWeight: 600, color: '#fff', letterSpacing: '-.01em' }}>{title}</p>
+                <p style={{ margin: 0, fontSize: 10, color: 'rgba(255,255,255,.35)', lineHeight: 1.4 }}>{sub}</p>
               </div>
             ))}
           </div>
         </div>
 
-        <p style={{ textAlign: 'center', marginTop: 24, fontSize: 12, color: 'rgba(255,255,255,.2)' }}>
+        <p style={{ textAlign: 'center', marginTop: 14, fontSize: 11, color: 'rgba(255,255,255,.2)' }}>
           Powered by{' '}
           <a href="/" className="focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#16C784] rounded" style={{ color: 'rgba(255,255,255,.35)', textDecoration: 'underline', textUnderlineOffset: 2 }}>Split</a>
         </p>
