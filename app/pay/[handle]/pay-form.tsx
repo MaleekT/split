@@ -11,8 +11,7 @@ import { parseSplitError } from '@/lib/errors'
 import { shortAddress, formatUsdc } from '@/lib/format'
 
 const TX_TIMEOUT_MS = 30_000
-const ACCENT       = '#16C784'
-const ACCENT_GLOW  = 'rgba(22,199,132,0.25)'
+const ACCENT = '#16C784'
 
 interface Props {
   recipientAddress: `0x${string}`
@@ -233,7 +232,7 @@ export function PayForm({ recipientAddress, displayName }: Props) {
           </a>
           <button type="button" onClick={() => { setSentTxHash(null); setSentAmount(null) }}
             className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16C784]"
-            style={{ width: '100%', height: 60, borderRadius: 18, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#1ADE97 0%,#16C784 100%)', color: '#fff', fontSize: 16, fontWeight: 600, boxShadow: `0px 10px 24px ${ACCENT_GLOW}` }}>
+            style={{ width: '100%', height: 48, borderRadius: 14, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%)', color: '#fff', fontSize: 15, fontWeight: 600 }}>
             Send again
           </button>
         </div>
