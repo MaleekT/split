@@ -373,7 +373,7 @@ export function PayForm({ recipientAddress, displayName }: Props) {
                   className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16C784] focus-visible:ring-offset-1 focus-visible:ring-offset-[#0B0D16]"
                   onMouseEnter={(e) => { if (!isDisabled) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.filter = 'brightness(1.05)' } }}
                   onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.filter = '' }}
-                  style={{ width: '100%', height: 48, borderRadius: 14, border: 'none', cursor: isDisabled ? 'not-allowed' : 'pointer', background: btnBg, color: btnColor, fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: isDisabled ? 'none' : `0px 8px 20px ${ACCENT_GLOW}`, transition: 'transform .15s ease, filter .15s ease' }}
+                  style={{ width: '100%', height: 48, borderRadius: 14, border: 'none', cursor: isDisabled ? 'not-allowed' : 'pointer', background: btnBg, color: btnColor, fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'transform .15s ease, filter .15s ease' }}
                 >
                   {step === 'idle' ? <IconSend /> : <IconSpinner />}
                   {btnLabel}
