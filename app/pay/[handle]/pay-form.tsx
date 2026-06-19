@@ -243,7 +243,7 @@ export function PayForm({ recipientAddress, displayName }: Props) {
 
   // ── Form ───────────────────────────────────────────────────────────────────────
   const cardBg   = 'linear-gradient(180deg,rgba(18,20,32,.95) 0%,rgba(11,13,22,.98) 100%)'
-  const btnBg    = isDisabled ? 'rgba(255,255,255,.06)' : 'linear-gradient(135deg,#1ADE97 0%,#16C784 100%)'
+  const btnBg    = isDisabled ? 'rgba(255,255,255,.06)' : 'linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%)'
   const btnColor = isDisabled ? 'rgba(255,255,255,.25)' : '#fff'
 
   return (
