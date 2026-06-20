@@ -17,34 +17,58 @@ const NAV: { href: string; label: string; icon: LucideIcon; exact: boolean }[] =
   { href: '/app/profile',  label: 'Profile',   icon: User,            exact: false },
 ]
 
-function NavList({ onNavigate }: { onNavigate?: () => void }) {
+function NavItem({ href, label, icon: Icon, exact, onNavigate }: {
+  href: string
+  label: string
+  icon: LucideIcon
+  exact: boolean
+  onNavigate?: () => void
+}) {
   const pathname = usePathname()
+  const active = exact ? pathname === href : pathname.startsWith(href)
+
+  return (
+    <Link
+      href={href}
+      onClick={onNavigate}
+      className={active ? 'sp-nav-active' : 'sp-nav-inactive'}
+    >
+      {active && <>
+        <span aria-hidden="true" style={{
+          position: 'absolute',
+          left: 0,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          width: 4,
+          height: '74%',
+          borderRadius: 999,
+          background: 'var(--nav-active-glow)',
+          boxShadow: '0 0 10px rgba(46,255,168,0.6), 0 0 25px rgba(46,255,168,0.4), 0 0 40px rgba(46,255,168,0.2)',
+        }} />
+        <span aria-hidden="true" style={{
+          position: 'absolute',
+          inset: 0,
+          borderRadius: 18,
+          background: 'radial-gradient(circle at 25% center, rgba(46,255,168,0.12), transparent 60%)',
+          pointerEvents: 'none',
+        }} />
+      </>}
+      <Icon
+        size={active ? 20 : 18}
+        className="sp-nav-icon"
+        style={{ flexShrink: 0, position: 'relative', zIndex: 1 }}
+      />
+      <span style={{ position: 'relative', zIndex: 1 }}>{label}</span>
+    </Link>
+  )
+}
+
+function NavList({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <nav aria-label="Main navigation" className="flex flex-col" style={{ gap: 4 }}>
-      {NAV.map(({ href, label, icon: Icon, exact }) => {
-        const active = exact ? pathname === href : pathname.startsWith(href)
-        return (
-          <Link
-            key={href}
-            href={href}
-            onClick={onNavigate}
-            className="flex items-center gap-3 transition-colors"
-            style={{
-              padding: '9px 12px',
-              borderRadius: 10,
-              fontFamily: "'Inter', sans-serif",
-              fontWeight: active ? 600 : 500,
-              fontSize: 14,
-              color: active ? 'var(--accent)' : 'var(--text-2)',
-              background: active ? 'var(--accent-bg)' : 'transparent',
-              border: active ? '0.5px solid var(--accent-border)' : '0.5px solid transparent',
-            }}
-          >
-            <Icon size={18} />
-            {label}
-          </Link>
-        )
-      })}
+      {NAV.map(({ href, label, icon, exact }) => (
+        <NavItem key={href} href={href} label={label} icon={icon} exact={exact} onNavigate={onNavigate} />
+      ))}
     </nav>
   )
 }

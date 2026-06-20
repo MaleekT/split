@@ -2,6 +2,8 @@
 
 /* ── Design tokens ─────────────────────────────────────────────────────────── */
 :root {
+  --nav-active-glow: #1AB87A;
+  --nav-icon-shadow: drop-shadow(0 0 10px rgba(26,184,122,0.35));
   --bg:          #F4F2EE;
   --bg-2:        #FFFFFF;
   --bg-3:        #ECEAE6;
@@ -23,6 +25,8 @@
 }
 
 .dark {
+  --nav-active-glow: #2EFFA8;
+  --nav-icon-shadow: drop-shadow(0 0 10px rgba(46,255,168,0.35));
   --bg:          #0B0B0F;
   --bg-2:        #15151C;
   --bg-3:        #1F1F28;
@@ -111,6 +115,85 @@ body {
   font-size: 0.9375rem;
   line-height: 1.6;
   transition: background 0.2s ease, color 0.2s ease;
+}
+
+/* ── Sidebar active nav item ─────────────────────────────────────────────────
+   All hover/active effects live here in CSS so they work correctly on both
+   pointer (desktop) and touch (mobile) devices without React hover state. */
+
+.sp-nav-active {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 16px 0 20px;
+  border-radius: 18px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--nav-active-glow);
+  background: linear-gradient(90deg, rgba(8,25,20,0.95) 0%, rgba(10,45,34,0.90) 35%, rgba(14,65,48,0.85) 100%);
+  border: 1px solid rgba(46,255,168,0.08);
+  box-shadow:
+    0 0 20px rgba(44,255,170,0.10),
+    0 0 40px rgba(44,255,170,0.08),
+    0 0 80px rgba(44,255,170,0.04),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+  text-decoration: none;
+  transition: box-shadow 250ms ease-out, filter 250ms ease-out, transform 150ms ease-out;
+}
+
+.sp-nav-active:active {
+  transform: scale(0.98);
+}
+
+/* Icon glow — active */
+.sp-nav-active .sp-nav-icon {
+  color: var(--nav-active-glow);
+  filter: var(--nav-icon-shadow);
+  transition: transform 250ms ease-out;
+}
+
+/* Icon color — inactive (explicit, avoids inheritance surprises) */
+.sp-nav-inactive .sp-nav-icon {
+  color: var(--text-2);
+}
+
+.sp-nav-inactive {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--text-2);
+  text-decoration: none;
+  transition: background 150ms ease;
+}
+
+/* Hover effects gated to true pointer devices — touch devices skip these */
+@media (hover: hover) {
+  .sp-nav-active:hover {
+    box-shadow:
+      0 0 24px rgba(44,255,170,0.14),
+      0 0 50px rgba(44,255,170,0.10),
+      0 0 90px rgba(44,255,170,0.06),
+      inset 0 1px 0 rgba(255,255,255,0.06);
+    filter: brightness(1.05);
+  }
+
+  .sp-nav-active:hover .sp-nav-icon {
+    transform: translateX(1px);
+  }
+
+  .sp-nav-inactive:hover {
+    background: var(--bg-3);
+  }
 }
 
 /* Tabular figures for monospace numeric content (USDC amounts, addresses, percentages) */
