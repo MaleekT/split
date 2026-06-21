@@ -236,7 +236,7 @@ export default function DashboardPage() {
                   placeholder="Amount to deposit"
                   value={depositStr}
                   onChange={(e) => setDepositStr(e.target.value)}
-                  className="flex-1 font-mono focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                  className="flex-1 min-w-0 font-mono focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
                   style={{ background: 'var(--bg-3)', border: '0.5px solid var(--border)', borderRadius: 10, padding: '10px 14px', fontSize: 14, color: 'var(--text)' }}
                 />
                 <button

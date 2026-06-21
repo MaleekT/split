@@ -232,6 +232,10 @@ code {
   gap: 16px;
 }
 
+@media (max-width: 640px) {
+  .bucket-grid { grid-template-columns: 1fr; }
+}
+
 /* ── Badge ─────────────────────────────────────────────────────────────────── */
 .badge {
   display: inline-flex;

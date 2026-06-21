@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import {
   Layers, Link as LinkIcon, ArrowDownToLine, GitBranch,
-  ArrowUpRight, Wallet, Target, CalendarClock, Menu, X, Sun, Moon, CheckCircle2,
+  ArrowUpRight, Wallet, Target, CalendarClock, Sun, Moon, CheckCircle2,
 } from 'lucide-react'
 import { SplitLogo } from '@/components/brand/logo'
 import { ThemeToggle } from '@/components/theme-toggle'
@@ -36,6 +36,10 @@ const PAGE_CSS = `
 @keyframes accentPulse {
   0%,100% { opacity:1; }
   50%      { opacity:0.72; }
+}
+@keyframes marquee {
+  from { transform:translateX(0); }
+  to   { transform:translateX(-50%); }
 }
 
 [data-reveal] {
@@ -74,6 +78,7 @@ const PAGE_CSS = `
 }
 .sp-nav-btn:hover { color:var(--accent); }
 .sp-nav-right { flex:1; display:flex; align-items:center; justify-content:flex-end; gap:10px; }
+.sp-nav-desktop { display:inline-flex; align-items:center; }
 .sp-btn-ghost {
   background:none; border:0.5px solid var(--border);
   border-radius:8px; padding:6px 14px; font-size:13px; font-weight:500;
@@ -91,16 +96,52 @@ const PAGE_CSS = `
 .sp-btn-cta:hover { opacity:0.85; transform:translateY(-1px); }
 .sp-ham {
   display:none; background:none; border:0.5px solid var(--border);
-  border-radius:6px; width:32px; height:32px; cursor:pointer;
+  border-radius:8px; width:44px; height:44px; cursor:pointer;
   color:var(--text); align-items:center; justify-content:center;
+  transition:background 0.15s, border-color 0.15s;
 }
+.sp-ham:hover { background:var(--bg-3); }
+.sp-ham-box { position:relative; width:18px; height:12px; }
+.sp-ham-box span {
+  position:absolute; left:0; width:100%; height:2px; border-radius:2px; background:currentColor;
+  transition:transform 0.3s cubic-bezier(0.16,1,0.3,1), opacity 0.18s ease, top 0.3s cubic-bezier(0.16,1,0.3,1);
+}
+.sp-ham-box span:nth-child(1) { top:0; }
+.sp-ham-box span:nth-child(2) { top:5px; }
+.sp-ham-box span:nth-child(3) { top:10px; }
+.sp-ham.open .sp-ham-box span:nth-child(1) { top:5px; transform:rotate(45deg); }
+.sp-ham.open .sp-ham-box span:nth-child(2) { opacity:0; }
+.sp-ham.open .sp-ham-box span:nth-child(3) { top:5px; transform:rotate(-45deg); }
 .sp-mmenu {
-  display:none; padding:16px 32px;
-  border-bottom:0.5px solid var(--border); background:var(--bg);
-  flex-direction:column; gap:14px;
+  position:fixed; inset:0; z-index:49;
+  background:color-mix(in srgb, var(--bg) 58%, transparent);
+  -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+  opacity:0; visibility:hidden; pointer-events:none;
+  transition:opacity 0.28s ease, visibility 0.28s;
 }
-.sp-mmenu.open { display:flex; }
-.sp-mmenu .sp-nav-btn { font-size:15px; }
+.sp-mmenu.open { opacity:1; visibility:visible; pointer-events:auto; }
+.sp-mmenu-panel {
+  position:absolute; top:56px; left:0; right:0;
+  max-height:calc(100dvh - 56px); overflow-y:auto;
+  background:var(--bg); border-bottom:0.5px solid var(--border);
+  padding:10px 20px 22px; display:flex; flex-direction:column; gap:2px;
+  transform:translateY(-18px); opacity:0;
+  transition:transform 0.3s cubic-bezier(0.16,1,0.3,1), opacity 0.26s ease;
+}
+.sp-mmenu.open .sp-mmenu-panel { transform:translateY(0); opacity:1; }
+.sp-mmenu-row {
+  display:flex; align-items:center; width:100%; min-height:48px;
+  padding:0 12px; background:none; border:none; border-radius:10px;
+  font-family:var(--font-inter,'Inter',sans-serif); font-size:16px; font-weight:400; color:var(--text);
+  text-align:left; cursor:pointer; transition:background 0.15s, color 0.15s;
+}
+.sp-mmenu-row:hover, .sp-mmenu-row:active { background:var(--bg-3); color:var(--accent); }
+.sp-mmenu-row:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+.sp-mmenu-div { height:0.5px; background:var(--border); margin:10px 4px; }
+.sp-mmenu-theme {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:4px 12px; font-size:14px; font-weight:400; color:var(--text-2); font-family:var(--font-inter,'Inter',sans-serif);
+}
 
 /* ── Hero ── */
 .sp-hero {
@@ -209,7 +250,8 @@ const PAGE_CSS = `
     border-color:var(--sp-glass-border);
   }
 }
-.sp-trust-row { display:none; }
+.sp-trust-row { display:none; overflow:hidden; -webkit-mask-image:linear-gradient(to right,transparent 0%,black 12%,black 88%,transparent 100%); mask-image:linear-gradient(to right,transparent 0%,black 12%,black 88%,transparent 100%); }
+.sp-trust-track { display:flex; gap:40px; width:max-content; animation:marquee 11s linear infinite; }
 .sp-bc-name { font-size:13px; font-weight:600; color:var(--text); }
 .sp-badge {
   display:inline-block; font-size:11px; font-weight:500;
@@ -451,6 +493,7 @@ const PAGE_CSS = `
 }
 @media(max-width:640px){
   .sp-nav-center { display:none; }
+  .sp-nav-desktop { display:none; }
   .sp-ham { display:flex; }
   .sp-btypes { grid-template-columns:1fr; }
   .sp-stats { flex-direction:column; }
@@ -468,10 +511,12 @@ const PAGE_CSS = `
   .sp-hero-btns { flex-direction:column; gap:12px; margin-top:24px; }
   .sp-btn-hero-p { width:100%; height:52px; border-radius:14px; justify-content:center; font-size:16px; }
   .sp-btn-hero-s { width:100%; height:52px; border-radius:14px; display:flex; justify-content:center; align-items:center; }
-  .sp-trust-row { display:flex; flex-wrap:wrap; gap:14px; margin-top:16px; }
-  .sp-trust-row span { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:500; color:var(--accent); }
-  .sp-hero-demo { margin-top:28px; background:linear-gradient(180deg,rgba(255,255,255,0.04) 0%,rgba(255,255,255,0.01) 100%); border:1px solid rgba(255,255,255,0.08); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); }
-  .sp-bc { background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01)); border:1px solid rgba(255,255,255,0.08); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); }
+  .sp-trust-row { display:flex; margin-top:16px; }
+  .sp-trust-row span { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:500; color:var(--accent); white-space:nowrap; }
+  .sp-hero-demo { margin-top:28px; background:var(--bg-2); border:0.5px solid var(--border); box-shadow:0 2px 20px rgba(0,0,0,0.07); }
+  .sp-bc { background:var(--bg-3); border:0.5px solid var(--border); }
+  .dark .sp-hero-demo { background:rgba(21,21,28,0.70); border-color:rgba(255,255,255,0.10); box-shadow:none; backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); }
+  .dark .sp-bc { background:rgba(11,11,15,0.65); border-color:rgba(255,255,255,0.08); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); }
 }
 @media(max-width:520px){
   .sp-tl-item { grid-template-columns:40px 0 1fr; gap:0 12px; }
@@ -750,6 +795,19 @@ export default function SplitHomePage() {
     }
   }, [])
 
+  /* Mobile menu: lock background scroll + close on Escape */
+  useEffect(() => {
+    if (!menuOpen) return
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prevOverflow
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [menuOpen])
+
   function scrollTo(id: string) {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     setMenuOpen(false)
@@ -771,18 +829,32 @@ export default function SplitHomePage() {
             <button className="sp-nav-btn" onClick={() => scrollTo('faq')}>FAQ</button>
           </div>
           <div className="sp-nav-right">
-            <NavThemeToggle />
+            <span className="sp-nav-desktop"><NavThemeToggle /></span>
             <Link href="/app" className="sp-btn-cta">Open App</Link>
-            <button className="sp-ham" onClick={() => setMenuOpen((v) => !v)} aria-label="Menu">
-              {menuOpen ? <X size={16} /> : <Menu size={16} />}
+            <button
+              className={`sp-ham${menuOpen ? ' open' : ''}`}
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={menuOpen}
+              aria-controls="sp-mobile-menu"
+            >
+              <span className="sp-ham-box" aria-hidden="true"><span></span><span></span><span></span></span>
             </button>
           </div>
         </nav>
-        <div className={`sp-mmenu${menuOpen ? ' open' : ''}`}>
-          <button className="sp-nav-btn" onClick={() => scrollTo('how-it-works')}>How it works</button>
-          <button className="sp-nav-btn" onClick={() => scrollTo('buckets')}>Buckets</button>
-          <button className="sp-nav-btn" onClick={() => scrollTo('faq')}>FAQ</button>
-          <Link href="/app" style={{ fontSize: 15, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Open App →</Link>
+        <div
+          id="sp-mobile-menu"
+          className={`sp-mmenu${menuOpen ? ' open' : ''}`}
+          aria-hidden={!menuOpen}
+          onClick={(e) => { if (e.target === e.currentTarget) setMenuOpen(false) }}
+        >
+          <div className="sp-mmenu-panel">
+            <button className="sp-mmenu-row" onClick={() => scrollTo('how-it-works')}>How it works</button>
+            <button className="sp-mmenu-row" onClick={() => scrollTo('buckets')}>Buckets</button>
+            <button className="sp-mmenu-row" onClick={() => scrollTo('faq')}>FAQ</button>
+            <div className="sp-mmenu-div" />
+            <div className="sp-mmenu-theme"><span>Theme</span><NavThemeToggle /></div>
+          </div>
         </div>
 
         {/* ── Hero ─────────────────────────────────────────── */}
@@ -812,9 +884,14 @@ export default function SplitHomePage() {
                 <button className="sp-btn-hero-s" onClick={() => scrollTo('how-it-works')}>See how it works ↓</button>
               </div>
               <div className="sp-trust-row">
-                <span><CheckCircle2 size={14} />No spreadsheets</span>
-                <span><CheckCircle2 size={14} />No transfers</span>
-                <span><CheckCircle2 size={14} />Auto-splits deposits</span>
+                <div className="sp-trust-track">
+                  <span><CheckCircle2 size={14} />No spreadsheets</span>
+                  <span><CheckCircle2 size={14} />No transfers</span>
+                  <span><CheckCircle2 size={14} />Auto-splits deposits</span>
+                  <span><CheckCircle2 size={14} />No spreadsheets</span>
+                  <span><CheckCircle2 size={14} />No transfers</span>
+                  <span><CheckCircle2 size={14} />Auto-splits deposits</span>
+                </div>
               </div>
             </div>
             <div>
