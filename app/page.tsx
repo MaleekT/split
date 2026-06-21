@@ -104,7 +104,7 @@ const PAGE_CSS = `
 .sp-ham-box { position:relative; width:18px; height:12px; }
 .sp-ham-box span {
   position:absolute; left:0; width:100%; height:2px; border-radius:2px; background:currentColor;
-  transition:transform 0.3s cubic-bezier(0.16,1,0.3,1), opacity 0.18s ease, top 0.3s cubic-bezier(0.16,1,0.3,1);
+  transition:transform 0.55s cubic-bezier(0.65,0,0.35,1), opacity 0.35s ease, top 0.55s cubic-bezier(0.65,0,0.35,1);
 }
 .sp-ham-box span:nth-child(1) { top:0; }
 .sp-ham-box span:nth-child(2) { top:5px; }
@@ -117,7 +117,7 @@ const PAGE_CSS = `
   background:color-mix(in srgb, var(--bg) 58%, transparent);
   -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
   opacity:0; visibility:hidden; pointer-events:none;
-  transition:opacity 0.28s ease, visibility 0.28s;
+  transition:opacity 0.9s ease-in-out, visibility 0.9s;
 }
 .sp-mmenu.open { opacity:1; visibility:visible; pointer-events:auto; }
 .sp-mmenu-panel {
@@ -125,8 +125,8 @@ const PAGE_CSS = `
   max-height:calc(100dvh - 56px); overflow-y:auto;
   background:var(--bg); border-bottom:0.5px solid var(--border);
   padding:10px 20px 22px; display:flex; flex-direction:column; gap:2px;
-  transform:translateY(-18px); opacity:0;
-  transition:transform 0.3s cubic-bezier(0.16,1,0.3,1), opacity 0.26s ease;
+  transform:translateY(-24px); opacity:0;
+  transition:transform 0.95s cubic-bezier(0.65,0,0.35,1), opacity 0.85s ease-in-out;
 }
 .sp-mmenu.open .sp-mmenu-panel { transform:translateY(0); opacity:1; }
 .sp-mmenu-row {
@@ -181,7 +181,9 @@ const PAGE_CSS = `
   position:relative; z-index:3;
   display:grid; grid-template-columns:1fr 1fr; gap:48px;
   align-items:center; max-width:1160px; margin:0 auto; padding:80px 40px;
+  min-width:0;
 }
+.sp-hero-grid > * { min-width:0; }
 .sp-hero-h {
   font-size:clamp(2rem,4vw,3.4rem); font-weight:700;
   line-height:1.08; letter-spacing:-0.035em; color:var(--text);
@@ -250,7 +252,7 @@ const PAGE_CSS = `
     border-color:var(--sp-glass-border);
   }
 }
-.sp-trust-row { display:none; overflow:hidden; -webkit-mask-image:linear-gradient(to right,transparent 0%,black 12%,black 88%,transparent 100%); mask-image:linear-gradient(to right,transparent 0%,black 12%,black 88%,transparent 100%); }
+.sp-trust-row { display:none; overflow:hidden; min-width:0; max-width:100%; -webkit-mask-image:linear-gradient(to right,transparent 0%,black 12%,black 88%,transparent 100%); mask-image:linear-gradient(to right,transparent 0%,black 12%,black 88%,transparent 100%); }
 .sp-trust-track { display:flex; gap:40px; width:max-content; animation:marquee 11s linear infinite; }
 .sp-bc-name { font-size:13px; font-weight:600; color:var(--text); }
 .sp-badge {
