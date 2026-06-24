@@ -4,8 +4,9 @@ import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import { useAccount, useSignMessage } from 'wagmi'
 import { isValidHandle } from '@/lib/handle'
-import { Camera, Copy, Download, Share2, X as XIcon } from 'lucide-react'
+import { Camera, Copy, Share2, X as XIcon } from 'lucide-react'
 import QRCode from 'qrcode'
+import { QrModal } from '@/components/qr-modal'
 
 type Availability = 'idle' | 'checking' | 'available' | 'taken' | 'invalid'
 
@@ -348,6 +349,7 @@ export default function ProfilePage() {
   const [copiedLink,    setCopiedLink]    = useState(false)
   const [igCopied,      setIgCopied]      = useState(false)
   const [qrDataUrl,     setQrDataUrl]     = useState<string | null>(null)
+  const [qrModalOpen,   setQrModalOpen]   = useState(false)
 
   /* ── load profile ─────────────────────────────────────────────────── */
   useEffect(() => {
@@ -515,14 +517,6 @@ export default function ProfilePage() {
     } else {
       navigator.clipboard.writeText(url).catch(() => {})
     }
-  }
-
-  function downloadQr() {
-    if (!qrDataUrl || !savedHandle) return
-    const a = document.createElement('a')
-    a.href = qrDataUrl
-    a.download = `split-${savedHandle}-qr.png`
-    a.click()
   }
 
   /* ── guard ────────────────────────────────────────────────────────── */
@@ -764,12 +758,11 @@ export default function ProfilePage() {
               <button
                 type="button"
                 className="pr-action-row"
-                onClick={downloadQr}
-                disabled={!qrDataUrl}
+                onClick={() => setQrModalOpen(true)}
               >
                 <span className="pr-action-left">
-                  <Download size={15} color="var(--text-2)" aria-hidden="true" />
-                  Download QR Code
+                  <Camera size={15} color="var(--text-2)" aria-hidden="true" />
+                  Scan QR Code
                 </span>
                 <span className="pr-action-right">
                   {qrDataUrl && (
@@ -785,6 +778,10 @@ export default function ProfilePage() {
                 </span>
               </button>
             </div>
+          )}
+
+          {qrModalOpen && savedHandle && (
+            <QrModal handle={savedHandle} onClose={() => setQrModalOpen(false)} />
           )}
 
           {/* Right footer */}
