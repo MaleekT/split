@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { useAccount, useSignMessage } from 'wagmi'
 import {
   buildAuthMessage,
@@ -68,16 +68,34 @@ export function usePayrollApi() {
   const { address } = useAccount()
   const { signMessageAsync } = useSignMessage()
 
+  // De-dupes concurrent/repeat token requests to a single in-flight signature.
+  // Without this, a render that fires several authed calls (or a re-render loop)
+  // would open one wallet signature popup per call, since nothing is cached until
+  // the user actually signs. Keyed by address so an account switch starts fresh.
+  const inFlight = useRef<{ address: string; promise: Promise<PayrollAuthToken> } | null>(null)
+
   // Obtain (and cache) a signed session token. Signs once per ~24h session.
   const getToken = useCallback(async (): Promise<PayrollAuthToken> => {
     if (!address) throw new Error('Connect your wallet first')
     const cached = tokenCache.get(address)
     if (cached && Date.parse(cached.expiresAt) - 60_000 > Date.now()) return cached
-    const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
-    const signature = await signMessageAsync({ message: buildAuthMessage(address, expiresAt) })
-    const token: PayrollAuthToken = { address, expiresAt, signature }
-    tokenCache.set(address, token)
-    return token
+    // A signature is already being collected for this address: reuse it instead
+    // of opening a second wallet popup.
+    if (inFlight.current && inFlight.current.address === address) return inFlight.current.promise
+    const promise = (async () => {
+      const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+      const signature = await signMessageAsync({ message: buildAuthMessage(address, expiresAt) })
+      const token: PayrollAuthToken = { address, expiresAt, signature }
+      tokenCache.set(address, token)
+      return token
+    })()
+    inFlight.current = { address, promise }
+    try {
+      return await promise
+    } finally {
+      // Clear only if still ours, so a later request re-signs (e.g. after reject).
+      if (inFlight.current?.promise === promise) inFlight.current = null
+    }
   }, [address, signMessageAsync])
 
   const authedFetch = useCallback(async (path: string, init?: RequestInit): Promise<Response> => {
@@ -179,10 +197,19 @@ export function usePayrollApi() {
     } catch { return null }
   }, [])
 
-  return {
+  // Stable object identity: every field is a useCallback with stable deps, so the
+  // consumer's effects that depend on `api.*` don't re-fire every render. Returning
+  // a bare object literal here would give a new reference each render and drive a
+  // render loop in callers that list `api` (or its methods) in effect deps.
+  return useMemo(() => ({
     address,
     listPayrolls, createPayroll, getPayroll, renamePayroll, deletePayroll,
     addPayee, editPayee, deletePayee,
     resolve, createRun, listRuns, getRun, recordChunkTx, setRunStatus, lookupMetaAddress,
-  }
+  }), [
+    address,
+    listPayrolls, createPayroll, getPayroll, renamePayroll, deletePayroll,
+    addPayee, editPayee, deletePayee,
+    resolve, createRun, listRuns, getRun, recordChunkTx, setRunStatus, lookupMetaAddress,
+  ])
 }
