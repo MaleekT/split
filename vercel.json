@@ -7,6 +7,14 @@
     {
       "path": "/api/cron/send",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/payroll-index",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/stealth-index",
+      "schedule": "0 3 * * *"
     }
   ]
 }

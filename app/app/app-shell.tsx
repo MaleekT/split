@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAccount } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { LayoutDashboard, Wallet, Activity, User, Headphones, Menu, X, ChevronDown, HelpCircle } from 'lucide-react'
+import { LayoutDashboard, Wallet, Activity, User, Headphones, Menu, X, ChevronDown, HelpCircle, Banknote, Shield } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { SplitLogo } from '@/components/brand/logo'
 import { ThemeToggle } from '@/components/theme-toggle'
@@ -13,6 +13,8 @@ import { ThemeToggle } from '@/components/theme-toggle'
 const NAV: { href: string; label: string; icon: LucideIcon; exact: boolean }[] = [
   { href: '/app',          label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { href: '/app/settings', label: 'Buckets',   icon: Wallet,          exact: false },
+  { href: '/app/payroll',  label: 'Payroll',   icon: Banknote,        exact: false },
+  { href: '/app/privacy',  label: 'Privacy',   icon: Shield,          exact: false },
   { href: '/app/activity', label: 'Activity',  icon: Activity,        exact: false },
   { href: '/app/profile',  label: 'Profile',   icon: User,            exact: false },
 ]
