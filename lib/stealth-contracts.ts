@@ -23,6 +23,13 @@ export function getStealthGatewayContract(): `0x${string}` {
 // ERC-5564 scheme id for secp256k1 stealth addresses.
 export const STEALTH_SCHEME_ID = 1n
 
+// An ERC-5564 scheme-1 meta-address is exactly two 33-byte compressed secp256k1
+// public keys (spending + viewing) = 66 bytes = 132 hex chars. Validated on both
+// the write path (registration) and the read path (pay pages) from this single
+// definition: this value feeds stealth-address derivation, so a malformed one
+// would route funds to an address the recipient cannot spend from.
+export const META_ADDRESS_RE = /^0x[0-9a-fA-F]{132}$/
+
 /**
  * Canonical message the account owner signs to register their meta-address
  * off-chain. Isomorphic so client and server build it identically; the server

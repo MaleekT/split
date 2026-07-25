@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAccount } from 'wagmi'
-import { ShieldCheck, Loader2, ScanLine, Eye } from 'lucide-react'
+import { ShieldCheck, Loader2, ScanLine, Eye, EyeOff, Globe, Copy, Check } from 'lucide-react'
 import { formatUsdc, shortAddress } from '@/lib/format'
 import { useStealth, type DetectedPayment } from '@/hooks/use-stealth'
 import { ClaimDialog } from '@/components/stealth/claim-dialog'
@@ -16,6 +16,7 @@ export default function PrivacyPage() {
   const stealth = useStealth()
 
   const [enabled, setEnabled]   = useState<boolean | null>(null)
+  const [handle, setHandle]     = useState<string | null>(null)
   const [enabling, setEnabling] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [payments, setPayments] = useState<DetectedPayment[] | null>(null)
@@ -26,10 +27,21 @@ export default function PrivacyPage() {
 
   const loadStatus = useCallback(async () => {
     if (!stealth.address) return
+    const addr = encodeURIComponent(stealth.address)
     try {
-      const r = await fetch(`/api/stealth/${encodeURIComponent(stealth.address)}`)
-      const body = await r.json() as { data?: { metaAddress: string | null } }
+      // Privacy status and handle load together: the private pay link needs the
+      // handle, and showing the link a beat after the status reads as a glitch.
+      const [statusRes, profileRes] = await Promise.all([
+        fetch(`/api/stealth/${addr}`),
+        fetch(`/api/profile?address=${addr}`),
+      ])
+      if (!statusRes.ok) throw new Error('status lookup failed')
+      const body = await statusRes.json() as { data?: { metaAddress: string | null } }
       if (mounted.current) setEnabled(!!body.data?.metaAddress)
+      if (profileRes.ok) {
+        const p = await profileRes.json() as { data?: { handle: string | null } | null }
+        if (mounted.current) setHandle(p.data?.handle ?? null)
+      }
     } catch {
       if (mounted.current) setEnabled(false)
     }
@@ -104,6 +116,10 @@ export default function PrivacyPage() {
         )}
       </section>
 
+      {/* Pay links: the two links are shown together so the difference between
+          them is obvious at the moment of sharing, not buried in docs. */}
+      {enabled && handle && <PayLinks handle={handle} />}
+
       {/* Private balance */}
       {enabled && (
         <section style={{ ...card(), marginTop: 16 }}>
@@ -165,6 +181,101 @@ export default function PrivacyPage() {
           onClaimed={() => { void handleScan() }}
         />
       )}
+    </div>
+  )
+}
+
+// ── Pay links ─────────────────────────────────────────────────────────────────
+
+interface PayLinkRowProps {
+  label:    string
+  hint:     string
+  href:     string
+  tone:     'public' | 'private'
+}
+
+function PayLinks({ handle }: { handle: string }) {
+  const [origin, setOrigin] = useState('')
+  // window is unavailable during SSR; read it after mount so the links render
+  // against the real deployment origin (preview URLs included).
+  useEffect(() => { setOrigin(window.location.origin) }, [])
+
+  const encoded = encodeURIComponent(handle)
+  return (
+    <section style={{ ...card(), marginTop: 16 }}>
+      <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Your pay links</h2>
+      <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2, marginBottom: 12 }}>
+        Two separate links. Share whichever fits the payment - nothing to switch on or off.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <PayLinkRow
+          tone="private"
+          label="Private link"
+          hint="Each payment lands at a fresh one-time address only you can detect."
+          href={`${origin}/pay/${encoded}/private`}
+        />
+        <PayLinkRow
+          tone="public"
+          label="Normal link"
+          hint="Ordinary transfer, publicly visible on-chain. Splits across your buckets."
+          href={`${origin}/pay/${encoded}`}
+        />
+      </div>
+    </section>
+  )
+}
+
+function PayLinkRow({ label, hint, href, tone }: PayLinkRowProps) {
+  const [copied, setCopied] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
+
+  const accent = tone === 'private' ? '#8B7CF6' : 'var(--accent)'
+
+  async function copy() {
+    if (!href) return
+    try {
+      await navigator.clipboard.writeText(href)
+      setCopied(true)
+      if (timer.current) clearTimeout(timer.current)
+      timer.current = setTimeout(() => setCopied(false), 2_000)
+    } catch {
+      // Clipboard can be blocked by permissions; the link stays selectable.
+    }
+  }
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 13px',
+      borderRadius: 12, background: 'var(--bg-3)',
+      border: `0.5px solid ${tone === 'private' ? 'rgba(139,124,246,.3)' : 'var(--border)'}`,
+    }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          {tone === 'private' ? <EyeOff size={13} style={{ color: accent, flexShrink: 0 }} />
+                              : <Globe size={13} style={{ color: 'var(--text-3)', flexShrink: 0 }} />}
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{label}</span>
+        </div>
+        <p style={{
+          fontSize: 11.5, color: 'var(--text-2)', marginTop: 3, marginBottom: 5, lineHeight: 1.45,
+        }}>{hint}</p>
+        <span style={{
+          display: 'block', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>{href || ' '}</span>
+      </div>
+      <button type="button" onClick={copy} disabled={!href}
+        aria-label={`Copy ${label.toLowerCase()}`}
+        style={{
+          height: 34, padding: '0 12px', borderRadius: 9, flexShrink: 0,
+          border: `0.5px solid ${tone === 'private' ? 'rgba(139,124,246,.35)' : 'var(--border)'}`,
+          background: 'var(--bg-2)', color: copied ? accent : 'var(--text-2)',
+          fontSize: 12, fontWeight: 700, cursor: href ? 'pointer' : 'not-allowed',
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+        }}>
+        {copied ? <Check size={13} /> : <Copy size={13} />}
+        {copied ? 'Copied' : 'Copy'}
+      </button>
     </div>
   )
 }

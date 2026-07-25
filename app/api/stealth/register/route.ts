@@ -2,7 +2,7 @@ import 'server-only'
 import { NextResponse } from 'next/server'
 import { isAddress, getAddress, verifyMessage } from 'viem'
 import { supabase } from '@/lib/supabase'
-import { buildStealthRegisterMessage, STEALTH_SCHEME_ID } from '@/lib/stealth-contracts'
+import { buildStealthRegisterMessage, META_ADDRESS_RE, STEALTH_SCHEME_ID } from '@/lib/stealth-contracts'
 
 // POST /api/stealth/register — store the caller's stealth meta-address off-chain.
 // Authenticated by a wallet signature that must recover to `address` (the same
@@ -22,7 +22,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
   // ERC-5564 scheme-1 meta-address: 0x + two secp256k1 pubkeys. Compressed is
   // 132 hex chars; allow up to uncompressed to be tolerant of SDK encoding.
-  if (typeof metaAddress !== 'string' || !/^0x[0-9a-fA-F]{130,264}$/.test(metaAddress)) {
+  if (typeof metaAddress !== 'string' || !META_ADDRESS_RE.test(metaAddress)) {
     return NextResponse.json({ error: 'Valid meta-address required' }, { status: 400 })
   }
   if (typeof signature !== 'string' || !signature.startsWith('0x')) {
