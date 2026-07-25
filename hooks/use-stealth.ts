@@ -8,10 +8,11 @@ import {
   computeStealthPrivateKey,
   quickClaim,
   privateClaim,
+  gasPriceWei,
   type QuickClaimResult,
   type PrivateClaimResult,
 } from '@/lib/stealth-claim'
-import type { ClaimBucket } from '@/lib/claim-math'
+import { claimReserveRaw, isDustAmount, type ClaimBucket } from '@/lib/claim-math'
 import {
   getRegistryContract,
   registryAbi,
@@ -33,6 +34,23 @@ export interface DetectedPayment {
   ephemeralPubKey: `0x${string}`
   txHash:          string
   blockNumber:     number
+  // Too small to ever claim: on Arc the gas reserve would exceed the amount.
+  // Typically the remainder left behind by a previous claim's gas reservation.
+  isDust:          boolean
+}
+
+/** Per-payment result of a batch claim. Failures never abort the run. */
+export interface ClaimAllOutcome {
+  payment: DetectedPayment
+  ok:      boolean
+  error?:  string
+}
+
+export interface ClaimAllProgress {
+  /** 1-based position of the payment now being claimed, so `position of total` reads correctly. */
+  position: number
+  total:    number
+  current:  DetectedPayment
 }
 
 interface AnnouncementApiRow {
@@ -148,6 +166,10 @@ export function useStealth() {
       } as const)),
       allowFailure: true,
     })
+    // One gas-price read for the whole scan: the dust line is the point where the
+    // claim's own gas reserve would swallow the payment, so it moves with gas.
+    const reserveRaw = claimReserveRaw(await gasPriceWei())
+
     const out: DetectedPayment[] = []
     mine.forEach((m, i) => {
       const res = balances[i]
@@ -159,6 +181,7 @@ export function useStealth() {
           ephemeralPubKey: m.ephemeral_pub_key as `0x${string}`,
           txHash:          m.tx_hash,
           blockNumber:     m.block_number,
+          isDust:          isDustAmount(bal, reserveRaw),
         })
       }
     })
@@ -194,5 +217,38 @@ export function useStealth() {
     return privateClaim({ stealthPrivateKey, mainAddress: address, buckets })
   }, [address, unlock])
 
-  return { address, busy, unlock, enablePrivacy, scan, claim }
+  /**
+   * Claim several payments in one action.
+   *
+   * Each stealth address is a separate account whose funds can only be moved by a
+   * transaction signed with its own key, so this is inherently sequential - N
+   * claims, not one batched transaction. Dust is skipped: claiming it is
+   * guaranteed to fail, and one guaranteed failure must not stop the rest.
+   *
+   * A failure is recorded and the run continues. That is safe because an unclaimed
+   * payment simply stays at its stealth address, still detectable by the next scan,
+   * so nothing is ever stranded by stopping early.
+   */
+  const claimAll = useCallback(async (
+    payments:    readonly DetectedPayment[],
+    mode:        'quick' | 'private',
+    onProgress?: (p: ClaimAllProgress) => void,
+  ): Promise<ClaimAllOutcome[]> => {
+    const claimable = payments.filter((p) => !p.isDust)
+    const outcomes: ClaimAllOutcome[] = []
+    for (const [index, payment] of claimable.entries()) {
+      // Reported once per payment, as it starts. Completion of the whole run is
+      // the resolved promise, so there is no second notification per item.
+      onProgress?.({ position: index + 1, total: claimable.length, current: payment })
+      try {
+        await claim(payment, mode)
+        outcomes.push({ payment, ok: true })
+      } catch (e) {
+        outcomes.push({ payment, ok: false, error: e instanceof Error ? e.message : 'Claim failed' })
+      }
+    }
+    return outcomes
+  }, [claim])
+
+  return { address, busy, unlock, enablePrivacy, scan, claim, claimAll }
 }

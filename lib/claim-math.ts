@@ -74,3 +74,35 @@ export function computeClaimPlan(buckets: readonly ClaimBucket[], amount: bigint
 export function claimTransferCount(plan: ClaimPlan): number {
   return plan.autoSends.length + (plan.toMainAddress > 0n ? 1 : 0)
 }
+
+// ── Arc gas economics ─────────────────────────────────────────────────────────
+// On Arc a stealth address's USDC balance IS its native gas balance: one pot,
+// native 18-decimal and the USDC facade 6-decimal (factor 1e12). Every claim must
+// therefore leave a gas reserve funded from the received amount, which means a
+// small enough payment can never be claimed at all - the reserve exceeds it.
+// Those payments are dust: real funds, permanently stuck, and showing a live
+// Claim button for them only produces a failed transaction.
+
+export const NATIVE_PER_USDC = 10n ** 12n
+export const GAS_MARGIN      = 2n        // 100% safety on estimated gas
+export const APPROVE_GAS     = 60_000n   // USDC facade approve
+export const DEPOSIT_GAS     = 450_000n  // depositFor with up to 10 buckets
+export const TRANSFER_GAS    = 90_000n   // one USDC facade transfer
+
+/** Cheapest claim path: Quick Claim, an approve plus a depositFor. */
+export const QUICK_CLAIM_GAS = APPROVE_GAS + DEPOSIT_GAS
+
+/** Gas reserve for `gasUnits` of work, expressed in 6-decimal USDC units. */
+export function claimReserveRaw(gasPriceWei: bigint, gasUnits: bigint = QUICK_CLAIM_GAS): bigint {
+  return (gasUnits * gasPriceWei * GAS_MARGIN) / NATIVE_PER_USDC
+}
+
+/**
+ * Whether a received amount is too small to ever claim. Deliberately measured
+ * against the CHEAPEST path, so nothing is written off as dust while some claim
+ * mode could still move it. Mirrors the `balance <= reserve` guard the claim
+ * executors enforce, so the UI and the executor agree on what is claimable.
+ */
+export function isDustAmount(amountRaw: bigint, reserveRaw: bigint): boolean {
+  return amountRaw <= reserveRaw
+}

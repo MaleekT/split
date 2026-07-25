@@ -3,12 +3,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAccount } from 'wagmi'
 import { ShieldCheck, Loader2, ScanLine, Eye, EyeOff, Globe, Copy, Check } from 'lucide-react'
+import { formatUnits } from 'viem'
 import { formatUsdc, shortAddress } from '@/lib/format'
-import { useStealth, type DetectedPayment } from '@/hooks/use-stealth'
+import { useStealth, type DetectedPayment, type ClaimAllProgress } from '@/hooks/use-stealth'
 import { ClaimDialog } from '@/components/stealth/claim-dialog'
 
 function fmt(raw: bigint): string {
   try { return formatUsdc(raw) } catch { return '?' }
+}
+
+/**
+ * Dust amounts are smaller than formatUsdc's 2 decimal places, so it renders them
+ * as a flat "0.00" - which reads as "empty" when the funds are real. Show enough
+ * precision that a genuinely tiny amount is still legible as a number.
+ */
+function formatUsdcPrecise(raw: bigint): string {
+  try {
+    const s = formatUnits(raw, 6)
+    // Only trim inside the fractional part. Trimming unconditionally would turn
+    // a whole "10" into "1".
+    return s.includes('.') ? s.replace(/\.?0+$/, '') : s
+  } catch { return '?' }
 }
 
 export default function PrivacyPage() {
@@ -22,6 +37,10 @@ export default function PrivacyPage() {
   const [scanning, setScanning] = useState(false)
   const [payments, setPayments] = useState<DetectedPayment[] | null>(null)
   const [claimTarget, setClaimTarget] = useState<DetectedPayment | null>(null)
+  const [claimAllOpen, setClaimAllOpen]   = useState(false)
+  const [claimingAll, setClaimingAll]     = useState(false)
+  const [claimProgress, setClaimProgress] = useState<ClaimAllProgress | null>(null)
+  const [claimAllError, setClaimAllError] = useState<string | null>(null)
   const [error, setError]       = useState<string | null>(null)
   const mounted = useRef(true)
   useEffect(() => () => { mounted.current = false }, [])
@@ -77,7 +96,36 @@ export default function PrivacyPage() {
     }
   }
 
-  const total = (payments ?? []).reduce((acc, p) => acc + p.amountRaw, 0n)
+  // Dust is separated out everywhere: it is real money but permanently
+  // unmovable, so it must not inflate the headline or enter a batch claim.
+  const claimable      = (payments ?? []).filter((p) => !p.isDust)
+  const dust           = (payments ?? []).filter((p) => p.isDust)
+  const claimableTotal = claimable.reduce((acc, p) => acc + p.amountRaw, 0n)
+
+  async function handleClaimAll(mode: 'quick' | 'private') {
+    setClaimAllOpen(false)
+    setClaimingAll(true); setClaimAllError(null); setClaimProgress(null)
+    try {
+      const outcomes = await stealth.claimAll(claimable, mode, (p) => {
+        if (mounted.current) setClaimProgress(p)
+      })
+      const failed = outcomes.filter((o) => !o.ok)
+      if (mounted.current && failed.length > 0) {
+        // Partial success is normal and safe: anything unclaimed stays at its
+        // stealth address and reappears on the next scan, so say so plainly
+        // rather than implying the funds were lost.
+        setClaimAllError(
+          `${outcomes.length - failed.length} of ${outcomes.length} claimed. ` +
+          `${failed.length} failed and ${failed.length === 1 ? 'is' : 'are'} still waiting: ${failed[0]?.error ?? 'unknown error'}`,
+        )
+      }
+    } catch (e) {
+      if (mounted.current) setClaimAllError(e instanceof Error ? e.message : 'Claim all failed')
+    } finally {
+      if (mounted.current) { setClaimingAll(false); setClaimProgress(null) }
+      await handleScan()
+    }
+  }
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
@@ -147,24 +195,69 @@ export default function PrivacyPage() {
                 </div>
               ) : (
                 <>
+                  {/* Headline counts only what can actually be moved: including
+                      unclaimable dust here would overstate the balance. */}
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-                    <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{fmt(total)}</span>
-                    <span style={{ fontSize: 13, color: 'var(--text-2)' }}>USDC across {payments.length} address{payments.length > 1 ? 'es' : ''}</span>
+                    <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{fmt(claimableTotal)}</span>
+                    <span style={{ fontSize: 13, color: 'var(--text-2)' }}>
+                      USDC across {claimable.length} address{claimable.length === 1 ? '' : 'es'}
+                    </span>
                   </div>
+
+                  {claimable.length > 1 && (
+                    <button type="button" onClick={() => setClaimAllOpen(true)} disabled={claimingAll}
+                      style={{
+                        width: '100%', height: 40, marginBottom: 4, borderRadius: 10, border: 'none',
+                        cursor: claimingAll ? 'not-allowed' : 'pointer',
+                        background: claimingAll ? 'var(--bg-3)' : 'linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%)',
+                        color: claimingAll ? 'var(--text-3)' : '#04110B', fontSize: 13, fontWeight: 700,
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      }}>
+                      {claimingAll
+                        ? <><Loader2 size={14} className="animate-spin" /> Claiming {claimProgress?.position ?? 1} of {claimProgress?.total ?? claimable.length}…</>
+                        : <>Claim all {claimable.length} payments</>}
+                    </button>
+                  )}
+
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    {payments.map((p) => (
+                    {claimable.map((p) => (
                       <div key={p.stealthAddress} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 2px', borderTop: '0.5px solid var(--border)' }}>
                         <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{shortAddress(p.stealthAddress)}</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
                           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{fmt(p.amountRaw)} USDC</span>
-                          <button type="button" onClick={() => setClaimTarget(p)}
-                            style={{ height: 32, padding: '0 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%)', color: '#04110B', fontSize: 12.5, fontWeight: 700 }}>
+                          <button type="button" onClick={() => setClaimTarget(p)} disabled={claimingAll}
+                            style={{ height: 32, padding: '0 14px', borderRadius: 8, border: 'none', cursor: claimingAll ? 'not-allowed' : 'pointer', background: claimingAll ? 'var(--bg-3)' : 'linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%)', color: claimingAll ? 'var(--text-3)' : '#04110B', fontSize: 12.5, fontWeight: 700 }}>
                             Claim
                           </button>
                         </div>
                       </div>
                     ))}
                   </div>
+
+                  {/* Dust: real funds, but the claim's own gas reserve exceeds
+                      them, so no claim can ever succeed. Shown rather than hidden
+                      (the money is genuinely there) with the Claim action removed,
+                      because offering it would only produce a failed transaction. */}
+                  {dust.length > 0 && (
+                    <div style={{ marginTop: 12, borderTop: '0.5px solid var(--border)', paddingTop: 10 }}>
+                      <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 6, lineHeight: 1.5 }}>
+                        Too small to claim. On Arc the gas for a claim is paid out of the payment itself, and these are
+                        smaller than that cost, so they cannot be moved. Usually the remainder left behind by an earlier claim.
+                      </p>
+                      {dust.map((p) => (
+                        <div key={p.stealthAddress} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '6px 2px', opacity: 0.55 }}>
+                          <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-3)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{shortAddress(p.stealthAddress)}</span>
+                          <span style={{ fontSize: 12, color: 'var(--text-3)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+                            {formatUsdcPrecise(p.amountRaw)} USDC
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {claimAllError && (
+                    <p role="alert" style={{ fontSize: 12, color: 'var(--danger)', marginTop: 10, lineHeight: 1.5 }}>{claimAllError}</p>
+                  )}
                 </>
               )}
             </>
@@ -176,6 +269,15 @@ export default function PrivacyPage() {
       <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 16, lineHeight: 1.5, maxWidth: 560 }}>
         Private payments hide <strong style={{ color: 'var(--text-2)' }}>which address</strong> received money, not <strong style={{ color: 'var(--text-2)' }}>how much</strong>. Amounts stay public. It protects your income trail, not a wallet you keep spending from.
       </p>
+
+      {claimAllOpen && (
+        <ClaimAllDialog
+          count={claimable.length}
+          totalRaw={claimableTotal}
+          onCancel={() => setClaimAllOpen(false)}
+          onConfirm={(mode) => { void handleClaimAll(mode) }}
+        />
+      )}
 
       {claimTarget && (
         <ClaimDialog
@@ -196,6 +298,80 @@ interface PayLinkRowProps {
   hint:     string
   href:     string
   tone:     'public' | 'private'
+}
+
+/**
+ * Mode chooser for a batch claim. The same Quick/Private decision the single
+ * claim dialog asks, chosen once and applied to every payment, and it states the
+ * transaction count up front: each stealth address is a separate account, so a
+ * batch is N transactions, not one. Nobody should start ten wallet-funded claims
+ * expecting a single fee.
+ */
+function ClaimAllDialog({ count, totalRaw, onCancel, onConfirm }: {
+  count: number
+  totalRaw: bigint
+  onCancel: () => void
+  onConfirm: (mode: 'quick' | 'private') => void
+}) {
+  const [mode, setMode] = useState<'quick' | 'private'>('quick')
+
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Claim all payments"
+      onClick={onCancel}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, zIndex: 50 }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ width: '100%', maxWidth: 420, background: 'var(--bg-2)', border: '0.5px solid var(--border)', borderRadius: 18, padding: 20 }}>
+        <h2 style={{ fontSize: 17, fontWeight: 800, color: 'var(--text)', marginBottom: 4 }}>
+          Claim {count} payments
+        </h2>
+        <p style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5, marginBottom: 14 }}>
+          {fmt(totalRaw)} USDC in total. Each payment sits at its own one-time address, so this sends{' '}
+          <strong style={{ color: 'var(--text)' }}>{count} separate transactions</strong>, one after another. Gas for each
+          comes out of that payment.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+          <ModeOption
+            selected={mode === 'quick'} onSelect={() => setMode('quick')}
+            title="Quick claim"
+            body="Routes through your buckets exactly like a normal payment. Publicly links each one-time address to your account at claim time; who paid you stays hidden."
+          />
+          <ModeOption
+            selected={mode === 'private'} onSelect={() => setMode('private')}
+            title="Private claim"
+            body="Sends straight to your bucket destinations, never touching the Split contract, so no event ties the addresses to your account. Costs more gas per payment."
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" onClick={onCancel}
+            style={{ flex: 1, height: 40, borderRadius: 10, border: '0.5px solid var(--border)', background: 'var(--bg-3)', color: 'var(--text-2)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            Cancel
+          </button>
+          <button type="button" onClick={() => onConfirm(mode)}
+            style={{ flex: 2, height: 40, borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%)', color: '#04110B', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            Claim all {count}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ModeOption({ selected, onSelect, title, body }: {
+  selected: boolean; onSelect: () => void; title: string; body: string
+}) {
+  return (
+    <button type="button" onClick={onSelect} aria-pressed={selected}
+      style={{
+        textAlign: 'left', padding: '11px 13px', borderRadius: 12, cursor: 'pointer',
+        border: `0.5px solid ${selected ? 'var(--accent-border)' : 'var(--border)'}`,
+        background: selected ? 'var(--accent-bg)' : 'var(--bg-3)',
+      }}>
+      <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: selected ? 'var(--accent)' : 'var(--text)', marginBottom: 2 }}>{title}</span>
+      <span style={{ display: 'block', fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.5 }}>{body}</span>
+    </button>
+  )
 }
 
 function PayLinks({ handle, linkToken }: { handle: string; linkToken: string | null }) {

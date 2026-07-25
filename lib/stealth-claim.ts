@@ -16,7 +16,11 @@ import { computeStealthKey, VALID_SCHEME_ID } from '@scopelift/stealth-address-s
 import { arcTestnet } from './chain'
 import { publicClient } from './arc'
 import { USDC, erc20Abi, getSplitContract, splitAbi } from './contracts'
-import { computeClaimPlan, claimTransferCount, type ClaimBucket } from './claim-math'
+import {
+  computeClaimPlan, claimTransferCount,
+  NATIVE_PER_USDC, GAS_MARGIN, DEPOSIT_GAS, TRANSFER_GAS,
+  type ClaimBucket,
+} from './claim-math'
 
 // erc20Abi in lib/contracts.ts (no-touch) has approve/balanceOf/allowance but not
 // transfer, which Private Claim needs; define it locally.
@@ -26,10 +30,11 @@ const erc20TransferAbi = [{
   outputs: [{ name: '', type: 'bool' }],
 }] as const
 
-const NATIVE_PER_USDC       = 10n ** 12n // 18-dec native per 6-dec USDC unit
-const GAS_MARGIN            = 2n         // 100% safety on estimated gas
-const FALLBACK_DEPOSIT_GAS  = 450_000n   // depositFor with up to 10 buckets
-const FALLBACK_TRANSFER_GAS = 90_000n    // one USDC facade transfer
+// Gas constants live in claim-math so the UI's dust threshold is computed from
+// the same numbers these executors reserve against; if they drifted, the UI would
+// offer a Claim button for an amount the executor then refuses.
+const FALLBACK_DEPOSIT_GAS  = DEPOSIT_GAS
+const FALLBACK_TRANSFER_GAS = TRANSFER_GAS
 
 export interface QuickClaimResult { approveTx: `0x${string}`; claimTx: `0x${string}`; amountRaw: bigint }
 export interface PrivateClaimResult { transfers: `0x${string}`[]; amountRaw: bigint }
@@ -61,7 +66,8 @@ function walletFor(stealthPrivateKey: `0x${string}`): WalletClient {
   })
 }
 
-async function gasPriceWei(): Promise<bigint> {
+/** Current gas price, with a fallback so a flaky RPC cannot block a claim. */
+export async function gasPriceWei(): Promise<bigint> {
   try { return await publicClient.getGasPrice() } catch { return 20_000_000_000n } // 20 gwei fallback
 }
 
