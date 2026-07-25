@@ -19,3 +19,13 @@ export const shortAddress = (addr: string): string => {
   const checksummed = getAddress(addr)
   return `${checksummed.slice(0, 6)}…${checksummed.slice(-4)}`
 }
+
+/**
+ * Render-safe recipient name for public pay pages: strips non-printable and
+ * non-ASCII characters (homoglyph/RTL-override spoofing of a handle), caps the
+ * length, and falls back when nothing usable remains.
+ */
+export const sanitizeDisplayName = (raw: string, fallback: string): string => {
+  const clean = raw.replace(/[^\x20-\x7E]/g, '').trim().slice(0, 60)
+  return clean.length > 0 ? clean : fallback
+}

@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { parseUnits, formatUnits, parseSignature, isAddress } from 'viem'
-import { useAccount, useReadContracts, useSignTypedData, useWriteContract } from 'wagmi'
+import { useAccount, useDisconnect, useReadContracts, useSignTypedData, useWriteContract } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { USDC, erc20Abi, ZERO_ADDRESS } from '@/lib/contracts'
 import { getStealthGatewayContract, stealthGatewayAbi } from '@/lib/stealth-contracts'
@@ -14,11 +14,15 @@ import {
 } from '@/lib/stealth'
 import { publicClient } from '@/lib/arc'
 import { parseSplitError } from '@/lib/errors'
-import { shortAddress, formatUsdc } from '@/lib/format'
+import { shortAddress, formatUsdc, sanitizeDisplayName } from '@/lib/format'
 
 const TX_TIMEOUT_MS = 60_000
 const AUTH_WINDOW_SECONDS = 3600n
-const ACCENT = '#8B7CF6' // violet, the privacy accent, distinct from the green pay flow
+// Deliberately the same green as the normal pay flow. This page must be
+// indistinguishable from a normal pay link to the PAYER: only the recipient
+// needs to know the link is private. A distinct violet accent (used elsewhere in
+// the app for privacy) would itself advertise that the recipient uses privacy.
+const ACCENT = '#16C784'
 
 interface Props {
   recipientAddress: `0x${string}`
@@ -32,6 +36,10 @@ function safeFormatUsdc(val: bigint): string {
 
 export function StealthPayForm({ recipientAddress, displayName, metaAddress }: Props) {
   const { address }            = useAccount()
+  const { disconnect }         = useDisconnect()
+  // Same guard the normal pay link uses: a handle is attacker-influenced text
+  // rendered to a payer, so strip spoofing characters before display.
+  const safeDisplayName        = sanitizeDisplayName(displayName, shortAddress(recipientAddress))
   const { signTypedDataAsync } = useSignTypedData()
   const { writeContractAsync } = useWriteContract()
   const mounted = useRef(true)
@@ -57,7 +65,7 @@ export function StealthPayForm({ recipientAddress, displayName, metaAddress }: P
   }, [amountStr])
 
   const isDisabled = step !== 'idle' || !parsedAmount
-  const btnLabel = step === 'signing' ? 'Approve in wallet…' : step === 'sending' ? 'Sending…' : 'Send privately'
+  const btnLabel = step === 'signing' ? 'Approve in wallet…' : step === 'sending' ? 'Sending…' : 'Send USDC'
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault()
@@ -122,12 +130,9 @@ export function StealthPayForm({ recipientAddress, displayName, metaAddress }: P
           <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(139,124,246,.12)', border: '1px solid rgba(139,124,246,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={ACCENT} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           </div>
-          <p style={{ fontSize: 22, fontWeight: 700, color: '#fff', margin: '0 0 8px' }}>Sent privately</p>
-          <p style={{ fontSize: 15, color: 'rgba(255,255,255,.55)', margin: '0 0 8px', lineHeight: 1.5 }}>
-            <span style={{ color: '#fff', fontWeight: 600 }}>{safeFormatUsdc(sentAmount)} USDC</span> to {displayName}
-          </p>
-          <p style={{ fontSize: 12, color: 'rgba(255,255,255,.4)', margin: '0 0 24px', lineHeight: 1.5 }}>
-            It landed at a fresh one-time address. Nothing on-chain links it to {displayName}.
+          <p style={{ fontSize: 22, fontWeight: 700, color: '#fff', margin: '0 0 8px' }}>Sent!</p>
+          <p style={{ fontSize: 15, color: 'rgba(255,255,255,.5)', margin: '0 0 24px', lineHeight: 1.5 }}>
+            <span style={{ color: '#fff', fontWeight: 600 }}>{safeFormatUsdc(sentAmount)} USDC</span>{' '}sent to {safeDisplayName}
           </p>
           <a href={`https://testnet.arcscan.app/tx/${sentTx}`} target="_blank" rel="noopener noreferrer"
             style={{ display: 'inline-block', fontSize: 12, fontFamily: 'monospace', color: 'rgba(255,255,255,.35)', marginBottom: 24, textDecoration: 'underline' }}>
@@ -143,20 +148,34 @@ export function StealthPayForm({ recipientAddress, displayName, metaAddress }: P
   return (
     <div style={wrap}>
       <div style={{ width: '100%', maxWidth: 380 }}>
+        {/* Header mirrors the normal pay link: no privacy badge, no privacy copy.
+            The recipient's main address is deliberately NOT shown - it is not
+            where this payment lands, so displaying it would be misleading. */}
         <div style={{ textAlign: 'center', marginBottom: 16 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(139,124,246,.1)', border: '1px solid rgba(139,124,246,.3)', borderRadius: 999, padding: '4px 12px', marginBottom: 12 }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={ACCENT} strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            <span style={{ fontSize: 11, fontWeight: 700, color: ACCENT, letterSpacing: '.02em' }}>PRIVATE PAYMENT</span>
+          <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'radial-gradient(circle,#0F1B18 0%,#08100E 100%)', border: '1px solid rgba(22,199,132,.25)', boxShadow: '0 0 24px rgba(22,199,132,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 20, fontWeight: 700, color: ACCENT, userSelect: 'none' }}>
+            {safeDisplayName.charAt(0).toUpperCase()}
           </div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#fff', margin: '0 0 5px' }}>Pay {displayName}</h1>
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,.45)', fontFamily: 'monospace' }}>{shortAddress(recipientAddress)}</span>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#fff', margin: '0 0 5px', letterSpacing: '-0.3px', lineHeight: 1.1 }}>
+            Pay {safeDisplayName}
+          </h1>
+          {address && (
+            <div style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                onClick={() => disconnect()}
+                className="focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#16C784] rounded"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'rgba(255,255,255,.3)', padding: 0 }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,.6)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,.3)' }}
+              >
+                {shortAddress(address)} · Disconnect
+              </button>
+            </div>
+          )}
         </div>
 
         <div style={card}>
           <div style={{ padding: '20px 20px 16px' }}>
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,.5)', lineHeight: 1.5, marginBottom: 16 }}>
-              This payment lands at a brand-new one-time address only {displayName} can detect. On-chain, it looks unrelated to them or to your other payments.
-            </p>
             <form onSubmit={handleSend} noValidate>
               <label htmlFor="amt" style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,.55)', marginBottom: 8 }}>Amount</label>
               <div style={{ height: 60, borderRadius: 16, background: 'rgba(255,255,255,.02)', border: `1px solid rgba(139,124,246,.45)`, display: 'flex', alignItems: 'center', padding: '0 14px', gap: 10, marginBottom: 10 }}>
@@ -183,7 +202,7 @@ export function StealthPayForm({ recipientAddress, displayName, metaAddress }: P
             </form>
           </div>
           <div style={{ borderTop: '1px solid rgba(255,255,255,.06)', padding: '12px 20px', fontSize: 11, color: 'rgba(255,255,255,.4)', lineHeight: 1.5 }}>
-            One signature, one transaction. Amounts remain public. This hides who is paid, not how much.
+            One signature, one transaction. Sent on Arc in USDC.
           </div>
         </div>
         <p style={{ textAlign: 'center', marginTop: 14, fontSize: 11, color: 'rgba(255,255,255,.2)' }}>Powered by Split</p>

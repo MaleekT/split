@@ -255,10 +255,27 @@ function PayLinkRow({ label, hint, href, tone }: PayLinkRowProps) {
           {tone === 'private' ? <EyeOff size={13} style={{ color: accent, flexShrink: 0 }} />
                               : <Globe size={13} style={{ color: 'var(--text-3)', flexShrink: 0 }} />}
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{label}</span>
+          {/* The two links differ only by a URL suffix, so the mode is stated in
+              words - never left to colour alone. */}
+          <span style={{
+            fontSize: 9.5, fontWeight: 800, letterSpacing: '.06em', padding: '2px 6px',
+            borderRadius: 999, flexShrink: 0,
+            background: tone === 'private' ? 'rgba(139,124,246,.14)' : 'var(--bg-2)',
+            color:      tone === 'private' ? accent : 'var(--text-3)',
+            border: `0.5px solid ${tone === 'private' ? 'rgba(139,124,246,.35)' : 'var(--border)'}`,
+          }}>{tone === 'private' ? 'PRIVATE' : 'PUBLIC'}</span>
         </div>
-        <p style={{
-          fontSize: 11.5, color: 'var(--text-2)', marginTop: 3, marginBottom: 5, lineHeight: 1.45,
-        }}>{hint}</p>
+        {/* On copy the hint is replaced by a confirmation that names the mode, so
+            a distracted copy cannot be mistaken for the other link. */}
+        <p role="status" aria-live="polite" style={{
+          fontSize: 11.5, marginTop: 3, marginBottom: 5, lineHeight: 1.45,
+          color: copied ? accent : 'var(--text-2)',
+          fontWeight: copied ? 700 : 400,
+        }}>
+          {copied
+            ? `Copied the ${label.toLowerCase()}: ${tone === 'private' ? 'payments here stay private' : 'payments here are public'}`
+            : hint}
+        </p>
         <span style={{
           display: 'block', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
