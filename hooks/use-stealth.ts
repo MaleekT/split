@@ -116,6 +116,12 @@ export function useStealth() {
   // at each stealth address that belongs to the user.
   const scan = useCallback(async (): Promise<DetectedPayment[]> => {
     const { keys } = await unlock()
+    // Bring the announcement index up to chain head first. Without this a payment
+    // that already landed stays invisible until the daily cron runs - and on
+    // preview deployments Vercel never runs crons at all, so it would never
+    // appear. A sync failure must not silently report "no payments": surface it.
+    const sync = await fetch('/api/stealth/sync', { method: 'POST' })
+    if (!sync.ok) throw new Error('Could not sync with the chain. Please try again.')
     const mine: AnnouncementApiRow[] = []
     let offset = 0
     for (let page = 0; page < MAX_SCAN_PAGES; page++) {
