@@ -3,8 +3,9 @@ import { NextResponse } from 'next/server'
 import { isAddress, getAddress, verifyMessage } from 'viem'
 import { supabase } from '@/lib/supabase'
 import { buildStealthRegisterMessage, META_ADDRESS_RE, STEALTH_SCHEME_ID } from '@/lib/stealth-contracts'
+import { generateLinkToken } from '@/lib/stealth-link'
 
-// POST /api/stealth/register — store the caller's stealth meta-address off-chain.
+// POST /api/stealth/register - store the caller's stealth meta-address off-chain.
 // Authenticated by a wallet signature that must recover to `address` (the same
 // per-action signature pattern as /api/profile). The on-chain ERC-6538 Registry
 // write is done separately by the client's wallet in the setup flow.
@@ -42,15 +43,22 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
   if (!valid) return NextResponse.json({ error: 'Signature does not match address' }, { status: 401 })
 
+  // Reuse an existing token rather than minting a new one on re-registration:
+  // rotating it here would silently break every private link already shared.
+  const { data: existing } = await supabase
+    .from('stealth_meta').select('link_token').eq('address', address).maybeSingle()
+  const linkToken = (existing?.link_token as string | null) ?? generateLinkToken()
+
   const { error } = await supabase
     .from('stealth_meta')
     .upsert({
       address,
       meta_address: metaAddress,
       scheme_id:    Number(STEALTH_SCHEME_ID),
+      link_token:   linkToken,
       updated_at:   new Date().toISOString(),
     }, { onConflict: 'address' })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, data: { linkToken } })
 }

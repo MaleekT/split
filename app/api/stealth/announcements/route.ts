@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 const DEFAULT_LIMIT = 500
 const MAX_LIMIT = 1000
 
-// GET /api/stealth/announcements?limit=&offset= — public list of ERC-5564
+// GET /api/stealth/announcements?limit=&offset= - public list of ERC-5564
 // announcements, oldest first, for CLIENT-SIDE scanning. The client downloads
 // pages and filters locally with its viewing key + the view tag; the server
 // never learns which announcements belong to whom (Bottleneck 6, Solution A).

@@ -16,6 +16,71 @@ import { publicClient } from '@/lib/arc'
 import { parseSplitError } from '@/lib/errors'
 import { shortAddress, formatUsdc, sanitizeDisplayName } from '@/lib/format'
 
+// ── Icons ─────────────────────────────────────────────────────────────────────
+// Duplicated from pay-form.tsx rather than shared, because extracting them would
+// mean editing that file and it carries the live depositFor payment path. These
+// are presentational only. Both pay pages must render identically, so any change
+// here has to be mirrored there.
+
+function IconSend() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+    </svg>
+  )
+}
+function IconChevronDown() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6 9 12 15 18 9"/>
+    </svg>
+  )
+}
+function IconWallet() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
+      <path d="M16 3H8L4 7h16l-4-4z"/>
+      <circle cx="17" cy="13" r="1" fill="rgba(255,255,255,0.35)" stroke="none"/>
+    </svg>
+  )
+}
+function IconShield() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ACCENT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    </svg>
+  )
+}
+function IconLightning() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ACCENT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+    </svg>
+  )
+}
+function IconCheck() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ACCENT} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+  )
+}
+function IconSpinner() {
+  return (
+    <svg className="animate-spin" style={{ transformOrigin: 'center' }} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
+      <path d="M12 2a10 10 0 0 1 10 10"/>
+    </svg>
+  )
+}
+
+const TRUST_ITEMS = [
+  { Icon: IconShield,    title: 'Secure',   sub: 'Protected transfer' },
+  { Icon: IconLightning, title: 'Fast',     sub: 'Usually instant'    },
+  { Icon: IconCheck,     title: 'Reliable', sub: 'USDC on Arc'        },
+]
+
 const TX_TIMEOUT_MS = 60_000
 const AUTH_WINDOW_SECONDS = 3600n
 // Deliberately the same green as the normal pay flow. This page must be
@@ -177,32 +242,86 @@ export function StealthPayForm({ recipientAddress, displayName, metaAddress }: P
         <div style={card}>
           <div style={{ padding: '20px 20px 16px' }}>
             <form onSubmit={handleSend} noValidate>
-              <label htmlFor="amt" style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,.55)', marginBottom: 8 }}>Amount</label>
-              <div style={{ height: 60, borderRadius: 16, background: 'rgba(255,255,255,.02)', border: `1px solid rgba(139,124,246,.45)`, display: 'flex', alignItems: 'center', padding: '0 14px', gap: 10, marginBottom: 10 }}>
-                <input id="amt" type="number" inputMode="decimal" min="0.000001" step="0.000001" placeholder="0.00" required autoFocus
-                  value={amountStr} onChange={(e) => setAmountStr(e.target.value)}
-                  className="focus:outline-none" style={{ flex: 1, background: 'transparent', border: 'none', fontSize: 24, fontWeight: 600, color: '#fff', width: '100%', minWidth: 0 }} />
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>USDC</span>
+
+              {/* Amount input - mirrors the normal pay link exactly */}
+              <div style={{ marginBottom: 10 }}>
+                <label htmlFor="pay-amount" style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,.55)', marginBottom: 8, letterSpacing: '.02em' }}>
+                  Amount
+                </label>
+                <div style={{ height: 60, borderRadius: 16, background: 'rgba(255,255,255,.02)', border: '1px solid rgba(22,199,132,.45)', boxShadow: 'inset 0 1px 1px rgba(255,255,255,.04)', display: 'flex', alignItems: 'center', padding: '0 12px', gap: 10 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid rgba(22,199,132,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={ACCENT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                    </svg>
+                  </div>
+                  <input
+                    id="pay-amount"
+                    type="number"
+                    inputMode="decimal"
+                    min="0.000001"
+                    step="0.000001"
+                    placeholder="0.00"
+                    required
+                    autoFocus
+                    value={amountStr}
+                    onChange={(e) => setAmountStr(e.target.value)}
+                    className="placeholder:text-white/20 focus:outline-none"
+                    style={{ flex: 1, background: 'transparent', border: 'none', fontSize: 24, fontWeight: 600, color: '#fff', fontFamily: "'Inter','SF Pro Display',system-ui,sans-serif", width: '100%', minWidth: 0 }}
+                  />
+                  <div style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.06)', borderRadius: 10, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#fff', letterSpacing: '.03em' }}>USDC</span>
+                    <IconChevronDown />
+                  </div>
+                </div>
               </div>
 
+              {/* Balance */}
               {address && walletBal > 0n && (
-                <button type="button" onClick={() => setAmountStr(formatUnits(walletBal, 6))}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginBottom: 14, fontSize: 12, fontWeight: 600, color: ACCENT, fontFamily: 'monospace' }}>
-                  Balance: {safeFormatUsdc(walletBal)} USDC
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                  <IconWallet />
+                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,.45)' }}>Balance:</span>
+                  <button
+                    type="button"
+                    onClick={() => setAmountStr(formatUnits(walletBal, 6))}
+                    className="focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#16C784] rounded"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12, fontWeight: 600, color: ACCENT, fontFamily: 'monospace' }}
+                  >
+                    {safeFormatUsdc(walletBal)} USDC
+                  </button>
+                </div>
               )}
 
-              {error && <p role="alert" style={{ fontSize: 13, color: '#FF6B6B', marginBottom: 14, lineHeight: 1.5 }}>{error}</p>}
+              {error && <p role="alert" style={{ fontSize: 13, color: '#FF6B6B', marginBottom: 16, lineHeight: 1.5 }}>{error}</p>}
 
               {!address ? (
-                <div style={{ display: 'flex', justifyContent: 'center' }}><ConnectButton label="Connect wallet to send" /></div>
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                  <ConnectButton label="Connect wallet to send" />
+                </div>
               ) : (
-                <button type="submit" disabled={isDisabled} style={btn(!isDisabled)}>{btnLabel}</button>
+                <button
+                  type="submit"
+                  disabled={isDisabled}
+                  className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16C784] focus-visible:ring-offset-1 focus-visible:ring-offset-[#0B0D16]"
+                  onMouseEnter={(e) => { if (!isDisabled) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.filter = 'brightness(1.05)' } }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.filter = '' }}
+                  style={{ width: '100%', height: 48, borderRadius: 14, border: 'none', cursor: isDisabled ? 'not-allowed' : 'pointer', background: isDisabled ? 'rgba(255,255,255,.06)' : `linear-gradient(135deg,#12A971 0%,${ACCENT} 100%)`, color: isDisabled ? 'rgba(255,255,255,.3)' : '#04110B', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'transform .15s ease, filter .15s ease' }}
+                >
+                  {step === 'idle' ? <IconSend /> : <IconSpinner />}
+                  {btnLabel}
+                </button>
               )}
             </form>
           </div>
-          <div style={{ borderTop: '1px solid rgba(255,255,255,.06)', padding: '12px 20px', fontSize: 11, color: 'rgba(255,255,255,.4)', lineHeight: 1.5 }}>
-            One signature, one transaction. Sent on Arc in USDC.
+
+          {/* Trust bar */}
+          <div style={{ borderTop: '1px solid rgba(255,255,255,.06)', background: 'rgba(255,255,255,.02)', padding: '14px 20px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, borderRadius: '0 0 24px 24px', position: 'relative', zIndex: 1 }}>
+            {TRUST_ITEMS.map(({ Icon, title, sub }) => (
+              <div key={title} style={{ textAlign: 'center' }}>
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}><Icon /></div>
+                <p style={{ margin: '0 0 2px', fontSize: 11, fontWeight: 600, color: '#fff', letterSpacing: '-.01em' }}>{title}</p>
+                <p style={{ margin: 0, fontSize: 10, color: 'rgba(255,255,255,.35)', lineHeight: 1.4 }}>{sub}</p>
+              </div>
+            ))}
           </div>
         </div>
         <p style={{ textAlign: 'center', marginTop: 14, fontSize: 11, color: 'rgba(255,255,255,.2)' }}>Powered by Split</p>

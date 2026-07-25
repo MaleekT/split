@@ -17,6 +17,7 @@ export default function PrivacyPage() {
 
   const [enabled, setEnabled]   = useState<boolean | null>(null)
   const [handle, setHandle]     = useState<string | null>(null)
+  const [linkToken, setLinkToken] = useState<string | null>(null)
   const [enabling, setEnabling] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [payments, setPayments] = useState<DetectedPayment[] | null>(null)
@@ -36,8 +37,11 @@ export default function PrivacyPage() {
         fetch(`/api/profile?address=${addr}`),
       ])
       if (!statusRes.ok) throw new Error('status lookup failed')
-      const body = await statusRes.json() as { data?: { metaAddress: string | null } }
-      if (mounted.current) setEnabled(!!body.data?.metaAddress)
+      const body = await statusRes.json() as { data?: { metaAddress: string | null; linkToken: string | null } }
+      if (mounted.current) {
+        setEnabled(!!body.data?.metaAddress)
+        setLinkToken(body.data?.linkToken ?? null)
+      }
       if (profileRes.ok) {
         const p = await profileRes.json() as { data?: { handle: string | null } | null }
         if (mounted.current) setHandle(p.data?.handle ?? null)
@@ -118,7 +122,7 @@ export default function PrivacyPage() {
 
       {/* Pay links: the two links are shown together so the difference between
           them is obvious at the moment of sharing, not buried in docs. */}
-      {enabled && handle && <PayLinks handle={handle} />}
+      {enabled && handle && <PayLinks handle={handle} linkToken={linkToken} />}
 
       {/* Private balance */}
       {enabled && (
@@ -194,7 +198,7 @@ interface PayLinkRowProps {
   tone:     'public' | 'private'
 }
 
-function PayLinks({ handle }: { handle: string }) {
+function PayLinks({ handle, linkToken }: { handle: string; linkToken: string | null }) {
   const [origin, setOrigin] = useState('')
   // window is unavailable during SSR; read it after mount so the links render
   // against the real deployment origin (preview URLs included).
@@ -208,12 +212,14 @@ function PayLinks({ handle }: { handle: string }) {
         Two separate links. Share whichever fits the payment - nothing to switch on or off.
       </p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <PayLinkRow
-          tone="private"
-          label="Private link"
-          hint="Each payment lands at a fresh one-time address only you can detect."
-          href={`${origin}/pay/${encoded}/private`}
-        />
+        {linkToken && (
+          <PayLinkRow
+            tone="private"
+            label="Private link"
+            hint="Each payment lands at a fresh one-time address only you can detect. The link looks ordinary - it does not reveal that it is private."
+            href={`${origin}/pay/${linkToken}`}
+          />
+        )}
         <PayLinkRow
           tone="public"
           label="Normal link"
@@ -221,6 +227,11 @@ function PayLinks({ handle }: { handle: string }) {
           href={`${origin}/pay/${encoded}`}
         />
       </div>
+      {!linkToken && (
+        <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 10, lineHeight: 1.5 }}>
+          Your private link is still being set up. Reload in a moment, or turn private payments on again to generate it.
+        </p>
+      )}
     </section>
   )
 }
