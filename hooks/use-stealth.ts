@@ -73,6 +73,26 @@ const keyCache = new Map<string, { keys: StealthKeys; metaAddress: `0x${string}`
 // forever; on exhaustion the scan proceeds with whatever is indexed so far.
 const MAX_SYNC_ROUNDS = 10
 
+// A single claim costs roughly a dozen RPC calls (gas price, two writes, two
+// receipt waits, a balance read, an estimate), so claiming several in a row is a
+// burst that metered RPCs reject with "request limit reached". These space the
+// calls out and retry a throttled claim instead of reporting it as failed, which
+// previously left funds unclaimed on a run that was only being rate-limited.
+const CLAIM_SPACING_MS   = 1_500
+const CLAIM_RETRY_LIMIT  = 3
+const CLAIM_BACKOFF_MS   = 4_000
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Whether a failure is the RPC throttling us rather than the claim being wrong.
+ * Retrying these is safe; retrying a genuine revert would just fail again.
+ */
+function isRateLimited(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return /request limit|rate limit|too many requests|-32011|429/i.test(msg)
+}
+
 const ANNOUNCE_PAGE = 500
 // Hard bound on scan pages so a misbehaving hasMore can never loop forever
 // (500 × 400 = 200k announcements, far beyond testnet volume).
@@ -255,12 +275,33 @@ export function useStealth() {
       // Reported once per payment, as it starts. Completion of the whole run is
       // the resolved promise, so there is no second notification per item.
       onProgress?.({ position: index + 1, total: claimable.length, current: payment })
-      try {
-        await claim(payment, mode)
-        outcomes.push({ payment, ok: true })
-      } catch (e) {
-        outcomes.push({ payment, ok: false, error: e instanceof Error ? e.message : 'Claim failed' })
+
+      // Space claims apart so the run does not present as one long burst.
+      if (index > 0) await sleep(CLAIM_SPACING_MS)
+
+      let lastError = 'Claim failed'
+      let claimed = false
+      for (let attempt = 1; attempt <= CLAIM_RETRY_LIMIT && !claimed; attempt++) {
+        try {
+          await claim(payment, mode)
+          claimed = true
+        } catch (e) {
+          // Raw RPC errors are a wall of URL and request-body noise. Say what
+          // actually happened and that the funds are untouched, since a failed
+          // claim reads alarmingly like lost money.
+          lastError = isRateLimited(e)
+            ? 'The network is rate-limiting requests right now. Nothing was sent and the payment is still waiting - try again shortly.'
+            : (e instanceof Error ? e.message : 'Claim failed')
+          // Only throttling is worth retrying. A revert or an underfunded
+          // address fails identically on a retry, so stop and report it.
+          if (!isRateLimited(e) || attempt === CLAIM_RETRY_LIMIT) break
+          await sleep(CLAIM_BACKOFF_MS * attempt)
+        }
       }
+
+      outcomes.push(claimed
+        ? { payment, ok: true }
+        : { payment, ok: false, error: lastError })
     }
     return outcomes
   }, [claim])
