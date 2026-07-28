@@ -461,10 +461,13 @@ function VaultCard({ stealth }: { stealth: ReturnType<typeof useStealth> }) {
 
   const address = stealth.vaultAddress
 
-  async function unlock() {
+  // Serves both the first open and every later refresh. vaultBalance() unlocks
+  // the Vault only if this session has not already, so re-checking a balance
+  // costs no further signature. Needed because a claim that routes into the Vault
+  // does not notify this card, leaving the figure stale until asked again.
+  async function checkBalance() {
     setBusy(true); setError(null)
     try {
-      await stealth.unlockVault()
       const bal = await stealth.vaultBalance()
       if (mounted.current) setBalance(bal)
     } catch (e) {
@@ -506,7 +509,7 @@ function VaultCard({ stealth }: { stealth: ReturnType<typeof useStealth> }) {
       {error && <p role="alert" style={{ fontSize: 12.5, color: 'var(--danger)', marginTop: 12, lineHeight: 1.5 }}>{error}</p>}
 
       {!address ? (
-        <button type="button" onClick={() => void unlock()} disabled={busy}
+        <button type="button" onClick={() => void checkBalance()} disabled={busy}
           style={{ ...primaryBtn(!busy), marginTop: 14, background: busy ? 'var(--bg-3)' : 'linear-gradient(135deg,#6D5CE7 0%,#8B7CF6 100%)', color: busy ? 'var(--text-3)' : '#fff' }}>
           {busy ? 'Waiting for your wallet…' : 'Set up / open my Vault'}
         </button>
@@ -529,10 +532,18 @@ function VaultCard({ stealth }: { stealth: ReturnType<typeof useStealth> }) {
 
           {/* Step 7: deliberate, never automatic, and never the default action. */}
           {!confirming ? (
-            <button type="button" onClick={() => setConfirming(true)} disabled={busy || balance === null || balance === 0n}
-              style={{ ...secondaryBtn(), opacity: balance === null || balance === 0n ? 0.5 : 1 }}>
-              Move to main wallet
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {/* On-demand refresh: a claim that routes into the Vault cannot tell
+                  this card, so the figure above is only as fresh as the last check.
+                  Costs no signature once the Vault is open for the session. */}
+              <button type="button" onClick={() => void checkBalance()} disabled={busy} style={secondaryBtn()}>
+                {busy ? 'Checking…' : 'Check Vault balance'}
+              </button>
+              <button type="button" onClick={() => setConfirming(true)} disabled={busy || balance === null || balance === 0n}
+                style={{ ...secondaryBtn(), opacity: balance === null || balance === 0n ? 0.5 : 1 }}>
+                Move to main wallet
+              </button>
+            </div>
           ) : (
             <div style={{ borderRadius: 12, border: '0.5px solid var(--danger-border, rgba(239,68,68,.35))', background: 'rgba(239,68,68,.06)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <p style={{ fontSize: 12.5, color: 'var(--text)', lineHeight: 1.55 }}>
