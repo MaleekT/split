@@ -1,7 +1,7 @@
 import 'server-only'
-import { decodeEventLog, getAddress } from 'viem'
+import { createPublicClient, decodeEventLog, getAddress, http } from 'viem'
 import type { Hex, Log } from 'viem'
-import { publicClient } from '@/lib/arc'
+import { arcTestnet } from '@/lib/chain'
 import { getAnnouncerContract, announcerAbi } from '@/lib/stealth-contracts'
 import { supabase } from '@/lib/supabase'
 
@@ -19,9 +19,45 @@ import { supabase } from '@/lib/supabase'
 // The Announcer emits very few events, so cost is driven by the number of RPC
 // round-trips (one per chunk), not by the block span covered.
 
-export const CHUNK_SPAN = 99_000
-const MAX_CHUNKS_PER_RUN = 60
+// Arc's public RPC (rpc.testnet.arc.network) rejects any getLogs span wider than
+// 10,000 blocks with -32614 "eth_getLogs is limited to a 10,000 range". Other
+// providers are more permissive (blockdaemon allows 100k), so this is the safe
+// floor that works everywhere; ARC_LOGS_MAX_SPAN raises it for a permissive RPC.
+// Getting this wrong is not a slow path, it is a hard failure: every chunk throws
+// and the cursor never advances, so scanning silently finds nothing.
+const DEFAULT_CHUNK_SPAN = 10_000
+
+// The indexer gets its own RPC, separate from the app's publicClient in lib/arc.
+// Backfilling is a burst workload and Arc's public RPC is metered for interactive
+// use: it caps getLogs at a 10k span AND rejects rapid sequences with -32011
+// ("request limit reached"), which together make a large backlog effectively
+// unclearable there. Point ARC_INDEXER_RPC at a provider with wider limits (and
+// raise ARC_LOGS_MAX_SPAN to match) to turn hundreds of requests into a handful.
+// Falls back to the app RPC so nothing breaks when it is unset.
+function indexerRpcUrl(): string {
+  const url = process.env.ARC_INDEXER_RPC ?? process.env.NEXT_PUBLIC_ARC_RPC
+  if (!url) throw new Error('ARC_INDEXER_RPC / NEXT_PUBLIC_ARC_RPC is not configured')
+  return url
+}
+
+const publicClient = createPublicClient({
+  chain: arcTestnet,
+  transport: http(indexerRpcUrl()),
+})
+
+function chunkSpan(): number {
+  const raw = Number(process.env.ARC_LOGS_MAX_SPAN)
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_CHUNK_SPAN
+}
+
+// With a 10k span and Arc's ~166k blocks/day, a run needs ~17 chunks just to
+// cover a day, so the cap is generous; the time budget is the real limiter.
+const MAX_CHUNKS_PER_RUN = 150
 const TIME_BUDGET_MS = 20_000
+// Delay between chunk requests, to stay under Arc's public-RPC burst limit.
+const THROTTLE_MS = 120
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 const CURSOR_KEY = 'stealth'
 // Sentinel meaning "never indexed"; the run then starts from STEALTH_DEPLOY_BLOCK.
 const INITIAL_CURSOR = 0
@@ -33,6 +69,8 @@ export interface CatchUpResult {
   chunks:       number
   indexed:      number
   decodeErrors: number
+  /** A chunk failed (rate limit, RPC blip, DB write) and the run stopped short. */
+  stoppedEarly: boolean
   caughtUp:     boolean
   message?:     string
 }
@@ -94,7 +132,8 @@ export function catchUpAnnouncements(): Promise<CatchUpResult> {
 
 async function runCatchUp(): Promise<CatchUpResult> {
   const empty = (message: string, caughtUp: boolean): CatchUpResult => ({
-    ok: true, from: null, to: null, chunks: 0, indexed: 0, decodeErrors: 0, caughtUp, message,
+    ok: true, from: null, to: null, chunks: 0, indexed: 0, decodeErrors: 0,
+    stoppedEarly: false, caughtUp, message,
   })
 
   // No-op cleanly until the Announcer is deployed/configured.
@@ -124,32 +163,52 @@ async function runCatchUp(): Promise<CatchUpResult> {
   if (lastBlock >= currentBlock) return empty('up to date', true)
 
   const startedAt = Date.now()
+  const span      = chunkSpan()
   const firstFrom = lastBlock + 1
   let cursor       = lastBlock
   let chunks       = 0
   let indexed      = 0
   let decodeErrors = 0
+  let stoppedEarly = false
 
   while (cursor < currentBlock && chunks < MAX_CHUNKS_PER_RUN) {
     const fromBlock = cursor + 1
-    const toBlock   = Math.min(currentBlock, fromBlock + CHUNK_SPAN - 1)
+    const toBlock   = Math.min(currentBlock, fromBlock + span - 1)
 
-    const logs = await publicClient.getLogs({
-      address: announcer, fromBlock: BigInt(fromBlock), toBlock: BigInt(toBlock),
-    })
+    // A chunk failure is progress stopping, not an error. Arc's public RPC
+    // rate-limits bursts (-32011 "request limit reached") and a long backlog
+    // needs many chunks, so throwing here would surface a hard error to a
+    // recipient whose scan was in fact advancing fine. The cursor is only
+    // advanced past chunks that were fully persisted, so stopping early is
+    // always safe: the next run resumes from exactly here and re-reads nothing.
+    let logs
+    try {
+      logs = await publicClient.getLogs({
+        address: announcer, fromBlock: BigInt(fromBlock), toBlock: BigInt(toBlock),
+      })
+    } catch (err) {
+      console.error(`[stealth-index] getLogs ${fromBlock}-${toBlock} failed:`, err)
+      stoppedEarly = true
+      break
+    }
+
     const decoded = decodeAnnouncements(logs)
-    decodeErrors += decoded.decodeErrors
 
     if (decoded.rows.length > 0) {
       const { error } = await supabase
         .from('announcements')
         .upsert(decoded.rows, { onConflict: 'tx_hash,log_index', ignoreDuplicates: true })
-      // Stop before advancing the cursor: advancing past un-persisted rows would
+      // Stop BEFORE advancing the cursor: advancing past un-persisted rows would
       // permanently skip those announcements, silently hiding real payments.
-      if (error) throw new Error(`announcements upsert: ${error.message}`)
+      if (error) {
+        console.error('[stealth-index] announcements upsert failed:', error)
+        stoppedEarly = true
+        break
+      }
       indexed += decoded.rows.length
     }
 
+    decodeErrors += decoded.decodeErrors
     cursor = toBlock
     chunks++
 
@@ -165,6 +224,12 @@ async function runCatchUp(): Promise<CatchUpResult> {
     if (writeErr) throw new Error(`cursor write: ${writeErr.message}`)
 
     if (Date.now() - startedAt > TIME_BUDGET_MS) break
+
+    // Pace the requests. Arc's public RPC rejects bursts with -32011, and a
+    // backlog needs dozens of chunks back to back; without this the run reliably
+    // trips the limiter partway and makes far less progress per invocation than
+    // a slightly slower loop that is allowed to finish.
+    await sleep(THROTTLE_MS)
   }
 
   // Progress fields describe THIS run, not global index state. If a concurrent
@@ -178,6 +243,7 @@ async function runCatchUp(): Promise<CatchUpResult> {
     chunks,
     indexed,
     decodeErrors,
+    stoppedEarly,
     caughtUp: cursor >= currentBlock,
   }
 }

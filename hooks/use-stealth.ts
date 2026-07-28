@@ -68,6 +68,11 @@ interface AnnouncementApiRow {
 // (Bottleneck 7); a page refresh clears them and the user re-derives by signing.
 const keyCache = new Map<string, { keys: StealthKeys; metaAddress: `0x${string}` }>()
 
+// Each sync request advances a bounded slice of blocks, so a long-neglected
+// index needs several. Bounded so a permanently-lagging index cannot spin
+// forever; on exhaustion the scan proceeds with whatever is indexed so far.
+const MAX_SYNC_ROUNDS = 10
+
 const ANNOUNCE_PAGE = 500
 // Hard bound on scan pages so a misbehaving hasMore can never loop forever
 // (500 × 400 = 200k announcements, far beyond testnet volume).
@@ -138,8 +143,18 @@ export function useStealth() {
     // that already landed stays invisible until the daily cron runs - and on
     // preview deployments Vercel never runs crons at all, so it would never
     // appear. A sync failure must not silently report "no payments": surface it.
-    const sync = await fetch('/api/stealth/sync', { method: 'POST' })
-    if (!sync.ok) throw new Error('Could not sync with the chain. Please try again.')
+    //
+    // One request only advances a bounded slice (the RPC caps getLogs spans and
+    // the route has a time budget), so keep going until it reports reaching head.
+    for (let round = 0; round < MAX_SYNC_ROUNDS; round++) {
+      const res = await fetch('/api/stealth/sync', { method: 'POST' })
+      if (!res.ok) throw new Error('Could not sync with the chain. Please try again.')
+      const body = await res.json() as { data?: { caughtUp?: boolean } }
+      if (body.data?.caughtUp) break
+      // Still behind after the last allowed round: scan what is indexed rather
+      // than failing outright. Results are partial but real, and the cursor has
+      // advanced, so the next scan resumes instead of starting over.
+    }
     const mine: AnnouncementApiRow[] = []
     let offset = 0
     for (let page = 0; page < MAX_SCAN_PAGES; page++) {
