@@ -21,22 +21,33 @@ export interface ClaimTransfer {
 }
 
 export interface ClaimPlan {
-  // One transfer per active auto-send bucket (to that bucket's destination).
+  // One transfer per active auto-send bucket (to that bucket's destination), plus
+  // one to the Private Vault when a hold portion exists and a Vault is set up.
   readonly autoSends:  readonly ClaimTransfer[]
-  // Combined amount routed to the user's main address: every hold bucket's share
-  // (hold buckets have no external destination), plus any floor remainder when
-  // there is no hold bucket to absorb it. Zero when there is nothing to send there.
-  readonly toMainAddress: bigint
+  // Hold-bucket share (plus any floor remainder) that has nowhere legitimate to go
+  // because no Vault exists yet. NOT sent: it stays at the stealth address, where
+  // the next scan re-detects it and it becomes claimable once a Vault is created.
+  //
+  // This deliberately replaces the old `toMainAddress` fallback. Pushing hold
+  // funds to the user's public main address partially deanonymised the very
+  // payment the private path exists to protect.
+  readonly deferredRaw: bigint
 }
 
 /**
  * Compute how to distribute `amount` (6-decimal USDC) across `buckets`, mirroring
  * Split._split: share_i = floor(amount * bps_i / 10000), and the floor remainder
- * is added to the LAST hold bucket (matching the contract's `lastHoldIdx`). Hold
- * shares are aggregated to the main address; auto-send shares go to their bucket
- * destinations. Zero-value shares produce no transfer.
+ * is added to the LAST hold bucket (matching the contract's `lastHoldIdx`).
+ *
+ * Auto-send shares go to their bucket destinations. Hold shares go to `vaultAddress`
+ * when one is set up, and are otherwise deferred (left at the stealth address) -
+ * never routed to the main address. Zero-value shares produce no transfer.
  */
-export function computeClaimPlan(buckets: readonly ClaimBucket[], amount: bigint): ClaimPlan {
+export function computeClaimPlan(
+  buckets: readonly ClaimBucket[],
+  amount: bigint,
+  vaultAddress: `0x${string}` | null = null,
+): ClaimPlan {
   const active = buckets.filter((b) => b.active)
 
   // Per-bucket floored shares.
@@ -53,26 +64,34 @@ export function computeClaimPlan(buckets: readonly ClaimBucket[], amount: bigint
     remainder = 0n
   }
 
-  // Map shares to transfers.
+  // Map shares to transfers. Hold-bucket shares are aggregated first, then routed
+  // in one transfer to the Vault (or deferred), rather than one transfer each.
   const autoSends: ClaimTransfer[] = []
-  let toMainAddress = 0n
+  let holdTotal = 0n
   active.forEach((b, i) => {
     const share = shares[i] ?? 0n
     if (share === 0n) return
-    if (b.destination === ZERO) toMainAddress += share
+    if (b.destination === ZERO) holdTotal += share
     else autoSends.push({ destination: b.destination, amount: share })
   })
 
-  // Any leftover remainder (no hold bucket existed) is not lost: route it to the
-  // main address so a Private Claim never strands floor dust at the stealth key.
-  toMainAddress += remainder
+  // Leftover remainder only survives when no hold bucket existed to absorb it.
+  // It follows the hold portion: to the Vault, or deferred. Never to the main
+  // address, which is what the removed fallback did.
+  holdTotal += remainder
 
-  return { autoSends, toMainAddress }
+  if (holdTotal > 0n && vaultAddress !== null) {
+    return { autoSends: [...autoSends, { destination: vaultAddress, amount: holdTotal }], deferredRaw: 0n }
+  }
+  return { autoSends, deferredRaw: holdTotal }
 }
 
 /** Number of on-chain transfers a Private Claim plan will make (for gas budgeting). */
 export function claimTransferCount(plan: ClaimPlan): number {
-  return plan.autoSends.length + (plan.toMainAddress > 0n ? 1 : 0)
+  // Every transfer now lives in autoSends, including the Vault one. Deferred funds
+  // move nothing, so they cost no gas - which is what makes a partial claim cheaper
+  // than a full one and lets the reserve be sized to actual work.
+  return plan.autoSends.length
 }
 
 // ── Arc gas economics ─────────────────────────────────────────────────────────

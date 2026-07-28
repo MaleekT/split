@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAccount } from 'wagmi'
-import { ShieldCheck, Loader2, ScanLine, Eye, EyeOff, Globe, Copy, Check } from 'lucide-react'
+import { ShieldCheck, Loader2, ScanLine, Eye, EyeOff, Globe, Copy, Check, Vault as VaultIcon } from 'lucide-react'
 import { formatUnits } from 'viem'
 import { formatUsdc, shortAddress } from '@/lib/format'
 import { useStealth, type DetectedPayment, type ClaimAllProgress } from '@/hooks/use-stealth'
@@ -102,11 +102,11 @@ export default function PrivacyPage() {
   const dust           = (payments ?? []).filter((p) => p.isDust)
   const claimableTotal = claimable.reduce((acc, p) => acc + p.amountRaw, 0n)
 
-  async function handleClaimAll(mode: 'quick' | 'private') {
+  async function handleClaimAll(mode: 'quick' | 'private', useVault: boolean) {
     setClaimAllOpen(false)
     setClaimingAll(true); setClaimAllError(null); setClaimProgress(null)
     try {
-      const outcomes = await stealth.claimAll(claimable, mode, (p) => {
+      const outcomes = await stealth.claimAll(claimable, mode, useVault, (p) => {
         if (mounted.current) setClaimProgress(p)
       })
       const failed = outcomes.filter((o) => !o.ok)
@@ -265,6 +265,8 @@ export default function PrivacyPage() {
         </section>
       )}
 
+      {enabled && <VaultCard stealth={stealth} />}
+
       {/* Honest limitation */}
       <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 16, lineHeight: 1.5, maxWidth: 560 }}>
         Private payments hide <strong style={{ color: 'var(--text-2)' }}>which address</strong> received money, not <strong style={{ color: 'var(--text-2)' }}>how much</strong>. Amounts stay public. It protects your income trail, not a wallet you keep spending from.
@@ -274,8 +276,9 @@ export default function PrivacyPage() {
         <ClaimAllDialog
           count={claimable.length}
           totalRaw={claimableTotal}
+          vaultReady={stealth.vaultAddress !== null}
           onCancel={() => setClaimAllOpen(false)}
-          onConfirm={(mode) => { void handleClaimAll(mode) }}
+          onConfirm={(mode, useVault) => { void handleClaimAll(mode, useVault) }}
         />
       )}
 
@@ -283,6 +286,8 @@ export default function PrivacyPage() {
         <ClaimDialog
           payment={claimTarget}
           claim={stealth.claim}
+          previewPrivateClaim={stealth.previewPrivateClaim}
+          vaultAddress={stealth.vaultAddress}
           onClose={() => setClaimTarget(null)}
           onClaimed={() => { void handleScan() }}
         />
@@ -307,13 +312,18 @@ interface PayLinkRowProps {
  * batch is N transactions, not one. Nobody should start ten wallet-funded claims
  * expecting a single fee.
  */
-function ClaimAllDialog({ count, totalRaw, onCancel, onConfirm }: {
+function ClaimAllDialog({ count, totalRaw, vaultReady, onCancel, onConfirm }: {
   count: number
   totalRaw: bigint
+  /** Vault already unlocked this session, so routing to it costs no extra signature. */
+  vaultReady: boolean
   onCancel: () => void
-  onConfirm: (mode: 'quick' | 'private') => void
+  onConfirm: (mode: 'quick' | 'private', useVault: boolean) => void
 }) {
   const [mode, setMode] = useState<'quick' | 'private'>('quick')
+  // Default to using the Vault when it is already open. Otherwise default off, so
+  // a bulk action never silently triggers signature prompts mid-run.
+  const [useVault, setUseVault] = useState(vaultReady)
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Claim all payments"
@@ -343,12 +353,34 @@ function ClaimAllDialog({ count, totalRaw, onCancel, onConfirm }: {
           />
         </div>
 
+        {/* Bulk claims must make the same Vault decision the single-claim dialog
+            asks about, or hold portions would be skipped across every payment
+            with no explanation. */}
+        {mode === 'private' && (
+          <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '11px 13px', marginBottom: 16, borderRadius: 12, background: 'var(--bg-3)', border: `0.5px solid ${useVault ? 'rgba(139,124,246,.35)' : 'var(--border)'}`, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={useVault}
+              onChange={(e) => setUseVault(e.target.checked)}
+              style={{ marginTop: 2, accentColor: '#8B7CF6', flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.55 }}>
+              <strong style={{ color: 'var(--text)' }}>Also claim the portion your buckets hold.</strong>{' '}
+              It goes to your Private Vault.{' '}
+              {vaultReady
+                ? 'Your Vault is already open, so this adds no extra signature.'
+                : 'Setting up asks for two signatures once, before the run starts.'}{' '}
+              Leave this off and that portion stays at each address, claimable later.
+            </span>
+          </label>
+        )}
+
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="button" onClick={onCancel}
             style={{ flex: 1, height: 40, borderRadius: 10, border: '0.5px solid var(--border)', background: 'var(--bg-3)', color: 'var(--text-2)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             Cancel
           </button>
-          <button type="button" onClick={() => onConfirm(mode)}
+          <button type="button" onClick={() => onConfirm(mode, mode === 'private' && useVault)}
             style={{ flex: 2, height: 40, borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%)', color: '#04110B', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
             Claim all {count}
           </button>
@@ -408,6 +440,120 @@ function PayLinks({ handle, linkToken }: { handle: string; linkToken: string | n
           Your private link is still being set up. Reload in a moment, or turn private payments on again to generate it.
         </p>
       )}
+    </section>
+  )
+}
+
+// ── Private Vault ─────────────────────────────────────────────────────────────
+// The Vault address is derived in the browser and held in session memory only. It
+// is never sent to the server, logged, or stored, because publishing the
+// main-address -> Vault mapping would let anyone watch the user's claimed private
+// income. See the HARD RULE in lib/vault.ts.
+
+function VaultCard({ stealth }: { stealth: ReturnType<typeof useStealth> }) {
+  const [balance, setBalance] = useState<bigint | null>(null)
+  const [busy, setBusy]       = useState(false)
+  const [error, setError]     = useState<string | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const [movedTx, setMovedTx] = useState<string | null>(null)
+  const mounted = useRef(true)
+  useEffect(() => () => { mounted.current = false }, [])
+
+  const address = stealth.vaultAddress
+
+  async function unlock() {
+    setBusy(true); setError(null)
+    try {
+      await stealth.unlockVault()
+      const bal = await stealth.vaultBalance()
+      if (mounted.current) setBalance(bal)
+    } catch (e) {
+      if (mounted.current) setError(e instanceof Error ? e.message : 'Could not open your Vault')
+    } finally {
+      if (mounted.current) setBusy(false)
+    }
+  }
+
+  async function consolidate() {
+    setBusy(true); setError(null)
+    try {
+      const { txHash } = await stealth.consolidateVault()
+      if (!mounted.current) return
+      setMovedTx(txHash)
+      setConfirming(false)
+      setBalance(await stealth.vaultBalance())
+    } catch (e) {
+      if (mounted.current) setError(e instanceof Error ? e.message : 'Could not move your Vault funds')
+    } finally {
+      if (mounted.current) setBusy(false)
+    }
+  }
+
+  return (
+    <section style={{ ...card(), marginTop: 16, borderColor: 'rgba(139,124,246,.3)' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(139,124,246,.12)', border: '0.5px solid rgba(139,124,246,.3)', color: '#8B7CF6' }}>
+          <VaultIcon size={18} />
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Private Vault</h2>
+          <p style={{ fontSize: 12.5, color: 'var(--text-2)', marginTop: 3, lineHeight: 1.55 }}>
+            Where the portion of a private payment your buckets hold in the contract goes. A Private Claim never touches the Split contract, so it needs a destination that is yours but is not your public wallet.
+          </p>
+        </div>
+      </div>
+
+      {error && <p role="alert" style={{ fontSize: 12.5, color: 'var(--danger)', marginTop: 12, lineHeight: 1.5 }}>{error}</p>}
+
+      {!address ? (
+        <button type="button" onClick={() => void unlock()} disabled={busy}
+          style={{ ...primaryBtn(!busy), marginTop: 14, background: busy ? 'var(--bg-3)' : 'linear-gradient(135deg,#6D5CE7 0%,#8B7CF6 100%)', color: busy ? 'var(--text-3)' : '#fff' }}>
+          {busy ? 'Waiting for your wallet…' : 'Set up / open my Vault'}
+        </button>
+      ) : (
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '11px 13px', borderRadius: 12, background: 'var(--bg-3)', border: '0.5px solid var(--border)' }}>
+            <span style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {shortAddress(address)}
+            </span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+              {balance === null ? '...' : `${fmt(balance)} USDC`}
+            </span>
+          </div>
+
+          {movedTx && (
+            <p style={{ fontSize: 12, color: 'var(--accent)', lineHeight: 1.5 }}>
+              Moved to your main wallet. <a href={`https://testnet.arcscan.app/tx/${movedTx}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'underline' }}>View transaction</a>
+            </p>
+          )}
+
+          {/* Step 7: deliberate, never automatic, and never the default action. */}
+          {!confirming ? (
+            <button type="button" onClick={() => setConfirming(true)} disabled={busy || balance === null || balance === 0n}
+              style={{ ...secondaryBtn(), opacity: balance === null || balance === 0n ? 0.5 : 1 }}>
+              Move to main wallet
+            </button>
+          ) : (
+            <div style={{ borderRadius: 12, border: '0.5px solid var(--danger-border, rgba(239,68,68,.35))', background: 'rgba(239,68,68,.06)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <p style={{ fontSize: 12.5, color: 'var(--text)', lineHeight: 1.55 }}>
+                <strong>This publicly links your Vault to your main wallet.</strong> The transfer is visible on-chain, and because the Vault is one reused address, anyone who sees it can look back through everything it has ever received. That history cannot be un-linked afterwards.
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={() => setConfirming(false)} disabled={busy} style={secondaryBtn()}>Cancel</button>
+                <button type="button" onClick={() => void consolidate()} disabled={busy}
+                  style={{ ...secondaryBtn(), background: 'var(--danger)', color: '#fff', borderColor: 'transparent' }}>
+                  {busy ? 'Moving…' : 'I understand, move it'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Step 8: what the Vault is and is not. Stated here rather than buried. */}
+      <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 14, lineHeight: 1.55 }}>
+        Your Vault is the <strong style={{ color: 'var(--text-2)' }}>same address every time</strong>, by design, so it is recoverable on any device by signing again. That reuse is also its limit: a persistent destination builds a noticeable pattern over time, so this is a real improvement over paying yourself in the open, not anonymity. Split can derive the key to spend from it, which is what makes claiming seamless, and also means it does not carry the separate confirmation step a standalone wallet app would give you.
+      </p>
     </section>
   )
 }
@@ -489,6 +635,13 @@ function card(): React.CSSProperties {
 }
 function badge(color: string): React.CSSProperties {
   return { width: 38, height: 38, borderRadius: 10, flexShrink: 0, background: 'var(--accent-bg)', border: '0.5px solid var(--accent-border)', color, display: 'flex', alignItems: 'center', justifyContent: 'center' }
+}
+function secondaryBtn(): React.CSSProperties {
+  return {
+    flex: 1, height: 40, borderRadius: 10, border: '0.5px solid var(--border)',
+    background: 'var(--bg-3)', color: 'var(--text)', fontSize: 13, fontWeight: 600,
+    cursor: 'pointer',
+  }
 }
 function primaryBtn(enabled: boolean): React.CSSProperties {
   return { width: '100%', height: 44, borderRadius: 10, border: 'none', cursor: enabled ? 'pointer' : 'not-allowed', background: enabled ? 'linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%)' : 'var(--bg-3)', color: enabled ? '#04110B' : 'var(--text-3)', fontSize: 14, fontWeight: 700 }

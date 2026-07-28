@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useState } from 'react'
-import { useAccount, useSignMessage, useWriteContract } from 'wagmi'
+import { useCallback, useEffect, useState } from 'react'
+import { useAccount, useSignMessage, useSignTypedData, useWriteContract } from 'wagmi'
 import { publicClient } from '@/lib/arc'
 import { USDC, erc20Abi, getSplitContract, splitAbi } from '@/lib/contracts'
 import {
@@ -11,8 +11,18 @@ import {
   gasPriceWei,
   type QuickClaimResult,
   type PrivateClaimResult,
+  sweepVaultToMain,
 } from '@/lib/stealth-claim'
-import { claimReserveRaw, isDustAmount, type ClaimBucket } from '@/lib/claim-math'
+import { claimReserveRaw, isDustAmount, computeClaimPlan, type ClaimBucket } from '@/lib/claim-math'
+import { arcTestnet } from '@/lib/chain'
+import {
+  vaultTypedData,
+  deriveVaultAddress,
+  deriveVaultKey,
+  vaultAddressFromKey,
+  assertDeterministicSignature,
+  assertVaultAddressMatches,
+} from '@/lib/vault'
 import {
   getRegistryContract,
   registryAbi,
@@ -68,6 +78,13 @@ interface AnnouncementApiRow {
 // (Bottleneck 7); a page refresh clears them and the user re-derives by signing.
 const keyCache = new Map<string, { keys: StealthKeys; metaAddress: `0x${string}` }>()
 
+// Private Vault, same discipline and for a stronger reason: see the HARD RULE in
+// lib/vault.ts. The address must never leave this session - persisting the
+// main-address -> Vault mapping anywhere would let an observer watch the user's
+// claimed private income, recreating the exact link the private path removes.
+// Deliberately a plain Map, not localStorage or any store that outlives the tab.
+const vaultCache = new Map<string, { vaultAddress: `0x${string}`; privateKey: `0x${string}` }>()
+
 // Each sync request advances a bounded slice of blocks, so a long-neglected
 // index needs several. Bounded so a permanently-lagging index cannot spin
 // forever; on exhaustion the scan proceeds with whatever is indexed so far.
@@ -101,8 +118,18 @@ const MAX_SCAN_PAGES = 400
 export function useStealth() {
   const { address }            = useAccount()
   const { signMessageAsync }   = useSignMessage()
+  const { signTypedDataAsync } = useSignTypedData()
   const { writeContractAsync } = useWriteContract()
   const [busy, setBusy]        = useState(false)
+  // Mirrors vaultCache so unlocking re-renders the UI. The Map is the source of
+  // truth (it survives remounts); this is the reactive view of it. Session only.
+  const [vaultAddress, setVaultAddress] = useState<`0x${string}` | null>(null)
+
+  // Re-sync when the connected account changes, so switching wallets never shows
+  // the previous account's Vault.
+  useEffect(() => {
+    setVaultAddress(address ? vaultCache.get(address)?.vaultAddress ?? null : null)
+  }, [address])
 
   // Derive (and cache) the user's stealth keys + meta-address from one signature.
   const unlock = useCallback(async (): Promise<{ keys: StealthKeys; metaAddress: `0x${string}` }> => {
@@ -223,12 +250,65 @@ export function useStealth() {
     return out
   }, [unlock])
 
+  // Read the user's live bucket config, which Private Claim mirrors off-contract.
+  const readBuckets = useCallback(async (): Promise<ClaimBucket[]> => {
+    if (!address) throw new Error('Connect your wallet first')
+    const raw = await publicClient.readContract({
+      address: getSplitContract(), abi: splitAbi, functionName: 'getBuckets', args: [address],
+    }) as readonly { bps: number; destination: `0x${string}`; active: boolean }[]
+    return raw.map((b) => ({ bps: Number(b.bps), destination: b.destination, active: b.active }))
+  }, [address])
+
+  /**
+   * Derive (and session-cache) the Private Vault. Signs TWICE and compares: a
+   * wallet whose signatures are not deterministic would derive a different Vault
+   * on a later visit and strand whatever was sent to the first one, so this is
+   * checked before any funds can be routed there, not after.
+   *
+   * Costs two wallet popups on first use per session, then nothing. Nothing here
+   * is persisted or transmitted - see the HARD RULE in lib/vault.ts.
+   */
+  const unlockVault = useCallback(async (): Promise<`0x${string}`> => {
+    if (!address) throw new Error('Connect your wallet first')
+    const cached = vaultCache.get(address)
+    if (cached) return cached.vaultAddress
+
+    const typedData = vaultTypedData(arcTestnet.id)
+    const sigA = await signTypedDataAsync(typedData) as `0x${string}`
+    const sigB = await signTypedDataAsync(typedData) as `0x${string}`
+    assertDeterministicSignature(sigA, sigB)
+
+    const entry = { vaultAddress: deriveVaultAddress(sigA), privateKey: deriveVaultKey(sigA) }
+    vaultCache.set(address, entry)
+    setVaultAddress(entry.vaultAddress)
+    return entry.vaultAddress
+  }, [address, signTypedDataAsync])
+
+  /**
+   * Inspect a Private Claim before committing to it, so the UI can tell whether a
+   * Vault is actually needed. Only payments with a hold portion require one, so a
+   * user with purely auto-send buckets is never asked to sign for a Vault.
+   */
+  const previewPrivateClaim = useCallback(async (
+    payment: DetectedPayment,
+  ): Promise<{ holdPortionRaw: bigint; needsVault: boolean }> => {
+    const buckets = await readBuckets()
+    // Planned against a null Vault: whatever is deferred is precisely the portion
+    // that has nowhere to go without one.
+    const plan = computeClaimPlan(buckets, payment.amountRaw, null)
+    return { holdPortionRaw: plan.deferredRaw, needsVault: plan.deferredRaw > 0n }
+  }, [readBuckets])
+
   // Claim a detected payment into the recipient's account. Computes the one-time
   // stealth private key from the user's own keys (app-signed, no wallet popups),
   // then either routes through buckets (Quick) or distributes directly (Private).
+  //
+  // `useVault` is decided by the caller: the dialog asks the user only when a hold
+  // portion exists, and a decline claims the rest rather than blocking.
   const claim = useCallback(async (
     payment: DetectedPayment,
     mode: 'quick' | 'private',
+    useVault = false,
   ): Promise<QuickClaimResult | PrivateClaimResult> => {
     if (!address) throw new Error('Connect your wallet first')
     const { keys } = await unlock()
@@ -242,15 +322,12 @@ export function useStealth() {
       return quickClaim({ stealthPrivateKey, mainAddress: address })
     }
 
-    // Private Claim needs the recipient's current bucket config to mirror the split.
-    const raw = await publicClient.readContract({
-      address: getSplitContract(), abi: splitAbi, functionName: 'getBuckets', args: [address],
-    }) as readonly { bps: number; destination: `0x${string}`; active: boolean }[]
-    const buckets: ClaimBucket[] = raw.map((b) => ({
-      bps: Number(b.bps), destination: b.destination, active: b.active,
-    }))
-    return privateClaim({ stealthPrivateKey, mainAddress: address, buckets })
-  }, [address, unlock])
+    const buckets = await readBuckets()
+    // Only unlock the Vault when it will actually be used; otherwise the hold
+    // portion is deferred at the stealth address and stays claimable later.
+    const vault = useVault ? await unlockVault() : null
+    return privateClaim({ stealthPrivateKey, buckets, vaultAddress: vault })
+  }, [address, unlock, readBuckets, unlockVault])
 
   /**
    * Claim several payments in one action.
@@ -267,6 +344,10 @@ export function useStealth() {
   const claimAll = useCallback(async (
     payments:    readonly DetectedPayment[],
     mode:        'quick' | 'private',
+    // Carried through per payment. Without this a bulk private claim would
+    // silently defer every hold portion, while the single-claim path asks - the
+    // two must not disagree about where funds go.
+    useVault:    boolean,
     onProgress?: (p: ClaimAllProgress) => void,
   ): Promise<ClaimAllOutcome[]> => {
     const claimable = payments.filter((p) => !p.isDust)
@@ -283,7 +364,7 @@ export function useStealth() {
       let claimed = false
       for (let attempt = 1; attempt <= CLAIM_RETRY_LIMIT && !claimed; attempt++) {
         try {
-          await claim(payment, mode)
+          await claim(payment, mode, useVault)
           claimed = true
         } catch (e) {
           // Raw RPC errors are a wall of URL and request-body noise. Say what
@@ -306,5 +387,37 @@ export function useStealth() {
     return outcomes
   }, [claim])
 
-  return { address, busy, unlock, enablePrivacy, scan, claim, claimAll }
+  /** Live USDC balance sitting in the Vault. Requires it to be unlocked. */
+  const vaultBalance = useCallback(async (): Promise<bigint> => {
+    const vault = await unlockVault()
+    return publicClient.readContract({
+      address: USDC, abi: erc20Abi, functionName: 'balanceOf', args: [vault],
+    }) as Promise<bigint>
+  }, [unlockVault])
+
+  /**
+   * Step 7: move everything in the Vault to the user's main wallet.
+   *
+   * Deliberate and never automatic. This is the one action that publicly links the
+   * Vault to the main address, and doing so can retroactively expose the Vault's
+   * whole history, so the caller must confirm before invoking it.
+   */
+  const consolidateVault = useCallback(async (): Promise<{ txHash: `0x${string}`; amountRaw: bigint }> => {
+    if (!address) throw new Error('Connect your wallet first')
+    const vault = await unlockVault()
+    const entry = vaultCache.get(address)
+    if (!entry) throw new Error('Vault is locked')
+
+    // Re-assert that the key still controls the address we recorded this session.
+    // Costs nothing and catches a wallet that changed signing behaviour BEFORE
+    // funds move, rather than after.
+    assertVaultAddressMatches(vaultAddressFromKey(entry.privateKey), vault)
+
+    return sweepVaultToMain({ vaultPrivateKey: entry.privateKey, mainAddress: address })
+  }, [address, unlockVault])
+
+  return {
+    address, busy, unlock, enablePrivacy, scan, claim, claimAll,
+    vaultAddress, unlockVault, previewPrivateClaim, vaultBalance, consolidateVault,
+  }
 }
