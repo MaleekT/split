@@ -41,6 +41,10 @@ export default function PrivacyPage() {
   const [claimingAll, setClaimingAll]     = useState(false)
   const [claimProgress, setClaimProgress] = useState<ClaimAllProgress | null>(null)
   const [claimAllError, setClaimAllError] = useState<string | null>(null)
+  // Bumped whenever a claim completes. The Vault card watches this and re-reads
+  // its balance, since a claim that routes funds into the Vault has no other way
+  // to tell the card its number is now stale.
+  const [claimVersion, setClaimVersion]   = useState(0)
   const [error, setError]       = useState<string | null>(null)
   const mounted = useRef(true)
   useEffect(() => () => { mounted.current = false }, [])
@@ -122,7 +126,7 @@ export default function PrivacyPage() {
     } catch (e) {
       if (mounted.current) setClaimAllError(e instanceof Error ? e.message : 'Claim all failed')
     } finally {
-      if (mounted.current) { setClaimingAll(false); setClaimProgress(null) }
+      if (mounted.current) { setClaimingAll(false); setClaimProgress(null); setClaimVersion((v) => v + 1) }
       await handleScan()
     }
   }
@@ -265,7 +269,7 @@ export default function PrivacyPage() {
         </section>
       )}
 
-      {enabled && <VaultCard stealth={stealth} />}
+      {enabled && <VaultCard stealth={stealth} refreshSignal={claimVersion} />}
 
       {/* Honest limitation */}
       <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 16, lineHeight: 1.5, maxWidth: 560 }}>
@@ -289,7 +293,7 @@ export default function PrivacyPage() {
           previewPrivateClaim={stealth.previewPrivateClaim}
           vaultAddress={stealth.vaultAddress}
           onClose={() => setClaimTarget(null)}
-          onClaimed={() => { void handleScan() }}
+          onClaimed={() => { setClaimVersion((v) => v + 1); void handleScan() }}
         />
       )}
     </div>
@@ -450,7 +454,11 @@ function PayLinks({ handle, linkToken }: { handle: string; linkToken: string | n
 // main-address -> Vault mapping would let anyone watch the user's claimed private
 // income. See the HARD RULE in lib/vault.ts.
 
-function VaultCard({ stealth }: { stealth: ReturnType<typeof useStealth> }) {
+function VaultCard({ stealth, refreshSignal }: {
+  stealth: ReturnType<typeof useStealth>
+  /** Increments when a claim completes, so a Vault-routed claim updates the card. */
+  refreshSignal: number
+}) {
   const [balance, setBalance] = useState<bigint | null>(null)
   const [busy, setBusy]       = useState(false)
   const [error, setError]     = useState<string | null>(null)
@@ -476,6 +484,22 @@ function VaultCard({ stealth }: { stealth: ReturnType<typeof useStealth> }) {
       if (mounted.current) setBusy(false)
     }
   }
+
+  // Re-read after a claim completes, so a Vault-routed claim does not leave a
+  // stale figure on the card.
+  //
+  // Guarded on the Vault already being open: auto-refreshing an unopened Vault
+  // would call unlockVault() and throw a wallet signature request at the user
+  // that they never asked for, right after an unrelated claim. Skipping is
+  // correct there - the balance is not shown yet anyway.
+  useEffect(() => {
+    if (refreshSignal === 0) return          // initial mount, nothing has happened
+    if (!stealth.vaultAddress) return        // locked: never auto-prompt to sign
+    void checkBalance()
+    // checkBalance is stable enough for this purpose and intentionally omitted:
+    // including it would re-run on every render of the parent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshSignal, stealth.vaultAddress])
 
   async function consolidate() {
     setBusy(true); setError(null)
