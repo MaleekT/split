@@ -7,7 +7,7 @@ import { Badge } from './badge'
 import { bucketIconFor } from './bucket-icon'
 import { shortAddress, formatUsdc } from '@/lib/format'
 import { bpsToPCT } from '@/lib/bps'
-import { SquarePen, ArrowDownToLine, CalendarClock, Target, Trash2 } from 'lucide-react'
+import { SquarePen, ArrowDownToLine, CalendarClock, Target, Trash2, Send } from 'lucide-react'
 
 const BUCKET_PALETTE = [
   { r: 29,  g: 158, b: 117 },
@@ -28,6 +28,10 @@ interface Props {
   colorIndex:   number
   onEdit:       () => void
   onWithdraw:   () => void
+  /** True when this bucket's destination is a wallet Split derived and can spend from. */
+  isGenerated?: boolean
+  /** Present only for generated buckets: opens the local-signing send dialog. */
+  onSendFromWallet?: () => void
   onSchedule:   () => void
   onSetGoal:    () => void
   onDelete:     () => void
@@ -56,7 +60,7 @@ function Ring({ pct, color, Icon }: { pct: number; color: string; Icon: React.Co
 const actionBtn = 'flex flex-col items-center gap-1 flex-1 rounded-lg py-1.5 transition-colors hover:bg-[rgba(255,255,255,0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]'
 const actionLabel = { fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 11 } as const
 
-export function BucketCard({ bucket, goal, routedTotal, iconSlug, colorIndex, onEdit, onWithdraw, onSchedule, onSetGoal, onDelete }: Props) {
+export function BucketCard({ bucket, goal, routedTotal, iconSlug, colorIndex, onEdit, onWithdraw, onSchedule, onSetGoal, onDelete, isGenerated = false, onSendFromWallet }: Props) {
   const isHold      = bucket.destination === ZERO_ADDRESS
   const hasGoal     = goal !== undefined && goal > 0n
   const canWithdraw = bucket.balance > 0n
@@ -144,6 +148,11 @@ export function BucketCard({ bucket, goal, routedTotal, iconSlug, colorIndex, on
 
         <p className={isHold ? '' : 'font-mono'} style={{ fontSize: 11, color: 'rgba(255,255,255,0.30)', marginTop: 2, fontFamily: isHold ? "'Inter', sans-serif" : undefined }}>
           {isHold ? 'Holds in contract' : shortAddress(bucket.destination)}
+          {!isHold && isGenerated && (
+            <span style={{ fontFamily: "'Inter', sans-serif", marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'rgba(29,158,117,0.9)' }}>
+              · SPLIT WALLET
+            </span>
+          )}
         </p>
 
         <div className="flex items-center gap-4" style={{ marginTop: 14 }}>
@@ -188,6 +197,15 @@ export function BucketCard({ bucket, goal, routedTotal, iconSlug, colorIndex, on
           >
             <ArrowDownToLine size={15} /><span style={actionLabel}>Withdraw</span>
           </button>
+          {isGenerated && onSendFromWallet && (
+            // Only for wallets Split derived: sends straight from the destination
+            // address with no wallet popup. Sits beside Withdraw rather than
+            // replacing it - Withdraw moves funds out of the Split contract, this
+            // moves funds already sitting in the bucket's own wallet.
+            <button type="button" onClick={onSendFromWallet} className={actionBtn} style={{ color: 'rgba(255,255,255,0.45)' }}>
+              <Send size={15} /><span style={actionLabel}>Send</span>
+            </button>
+          )}
           <button type="button" onClick={onSchedule} className={actionBtn} style={{ color: 'rgba(255,255,255,0.45)' }}>
             <CalendarClock size={15} /><span style={actionLabel}>Schedule</span>
           </button>

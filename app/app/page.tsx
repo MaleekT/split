@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { parseUnits } from 'viem'
 import { useAccount, useReadContracts, useWriteContract, useChainId, useSwitchChain } from 'wagmi'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -19,6 +19,9 @@ import { InsightsCard } from '@/components/insights-card'
 import { AllocationOverview } from '@/components/allocation-overview'
 import { CoinGraphic } from '@/components/coin-graphic'
 import { BucketCard } from '@/components/bucket-card'
+import { TotalBalanceCard } from '@/components/total-balance-card'
+import { BucketWalletSendModal } from '@/components/bucket-wallet-send-modal'
+import { useBucketWallets, type GeneratedBucketWallet } from '@/hooks/use-bucket-wallets'
 import { AddBucketModal } from '@/components/add-bucket-modal'
 import { WithdrawModal } from '@/components/withdraw-modal'
 import { ScheduleModal } from '@/components/schedule-modal'
@@ -103,6 +106,22 @@ export default function DashboardPage() {
   const [modal, setModal]               = useState<ModalState>(null)
   const [hideBalances, setHideBalances] = useState(false)
   const [addOpen, setAddOpen]           = useState(false)
+
+  // Which buckets have an app-generated destination. A display hint only: it needs
+  // no signature, and nothing here is trusted when money moves (a send re-derives
+  // the key and checks it against the bucket's on-chain destination first).
+  const bucketWallets = useBucketWallets()
+  const [generatedWallets, setGeneratedWallets] = useState<GeneratedBucketWallet[]>([])
+  const [sendWallet, setSendWallet] = useState<
+    { bucketName: string; derivationIndex: number; walletAddress: `0x${string}` } | null
+  >(null)
+  useEffect(() => {
+    let alive = true
+    void bucketWallets.listGenerated()
+      .then((w) => { if (alive) setGeneratedWallets(w) })
+      .catch(() => { /* hint only: the dashboard still renders without it */ })
+    return () => { alive = false }
+  }, [bucketWallets])
 
   // Returns null for empty/invalid input — caller treats null as "not ready"
   const parsedDepositAmount = useMemo<bigint | null>(() => {
@@ -196,6 +215,15 @@ export default function DashboardPage() {
       <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
         {/* ── LEFT COLUMN ── */}
         <div className="flex flex-col gap-5 min-w-0">
+          {/* Total Balance. Additive: the two figures below keep their existing
+              meanings, this one aggregates across them plus wallets Split can see. */}
+          <TotalBalanceCard
+            buckets={buckets}
+            holdTotal={totalBal}
+            generated={generatedWallets}
+            mask={mask}
+          />
+
           {/* Total in Split card */}
           <section className="relative overflow-hidden" style={{ background: 'var(--bg-2)', border: '0.5px solid var(--border)', borderRadius: 16, padding: 24 }}>
             <CoinGraphic className="hidden sm:block absolute top-1 right-1 w-40 h-40 pointer-events-none" />
@@ -308,11 +336,23 @@ export default function DashboardPage() {
               <div className="bucket-grid">
                 {buckets.map((b, index) => {
                   const raw = routedTotals?.[String(b.id)]
+                  // Matched on the CHAIN destination, not on the bucket id alone, so
+                  // a stale hint row cannot attach the send action to the wrong
+                  // address. sendFrom re-derives and re-checks before moving funds.
+                  const gen = generatedWallets.find(
+                    (g) => g.walletAddress.toLowerCase() === b.destination.toLowerCase(),
+                  )
                   return (
                     <BucketCard
                       key={String(b.id)}
                       bucket={b}
                       goal={goals?.[String(b.id)]}
+                      isGenerated={!!gen}
+                      onSendFromWallet={gen ? () => setSendWallet({
+                        bucketName: b.name,
+                        derivationIndex: gen.derivationIndex,
+                        walletAddress: b.destination,
+                      }) : undefined}
                       routedTotal={raw ? BigInt(raw) : 0n}
                       iconSlug={bucketIcons?.[String(b.id)]}
                       colorIndex={index}
@@ -340,6 +380,16 @@ export default function DashboardPage() {
       </div>
 
       {addOpen && <AddBucketModal onClose={() => setAddOpen(false)} />}
+
+      {sendWallet && (
+        <BucketWalletSendModal
+          bucketName={sendWallet.bucketName}
+          derivationIndex={sendWallet.derivationIndex}
+          walletAddress={sendWallet.walletAddress}
+          onClose={() => setSendWallet(null)}
+          onSent={() => { void refetch() }}
+        />
+      )}
       {modal?.kind === 'edit' && <EditBucketModal bucket={modal.bucket} onClose={() => setModal(null)} />}
       {modal?.kind === 'withdraw' && <WithdrawModal bucket={modal.bucket} onClose={() => setModal(null)} />}
       {modal?.kind === 'schedule' && <ScheduleModal bucket={modal.bucket} onClose={() => setModal(null)} />}
