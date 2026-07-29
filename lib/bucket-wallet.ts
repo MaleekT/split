@@ -126,18 +126,27 @@ export interface BucketWalletRecovery {
 }
 
 /**
- * Default scan bound. Chosen from measurement, not taste: derivation costs ~1.5ms
- * (secp256k1 point multiplication dominates), so 1,000 indices is ~1.5s worst case
- * and only paid when something is genuinely unattributable - a full match exits
- * early, so the normal case is a handful of derivations.
+ * Default scan bound. Set from measurement, not taste: derivation costs ~1.5ms
+ * (secp256k1 point multiplication dominates), so this is ~15s in the worst case -
+ * and that cost is only paid in the rare deep scan where the metadata table is
+ * gone AND a destination is unattributable. A full match exits early, so the
+ * normal case is a handful of derivations and a few milliseconds.
  *
- * A literally unbounded scan is not viable at that cost. The safety property is
- * therefore NOT "the ceiling is high enough" but "nothing is ever mislabelled":
- * whatever the bound, unmatched destinations come back as `unresolved`, never as
- * "not generated". With MAX_BUCKETS = 10 on-chain, 1,000 lifetime generated-bucket
- * creations is already far past realistic use.
+ * Deliberately generous rather than configurable: with MAX_BUCKETS = 10 on-chain
+ * and orphaned reservations reclaimed, reaching index 10,000 would take ~10,000
+ * lifetime generated-bucket creations. That is effectively unbounded margin with
+ * no extra state or mechanism to get wrong.
+ *
+ * The safety property is NOT "the ceiling is high enough" - no ceiling can
+ * guarantee that - but "nothing is ever mislabelled": whatever the bound,
+ * unmatched destinations come back as `unresolved`, never as "not generated".
  */
-export const DEFAULT_SCAN_BOUND = 1_000
+export const DEFAULT_SCAN_BOUND = 10_000
+
+// Derivations between yields to the event loop. A deep scan is ~15s of CPU, which
+// run synchronously would freeze the tab outright; yielding keeps the page
+// responsive at a cost of a few hundred milliseconds across the whole scan.
+const YIELD_EVERY = 512
 
 /**
  * Recover which derivation index produced each of `destinations`, without the
@@ -150,12 +159,15 @@ export const DEFAULT_SCAN_BOUND = 1_000
  * consume indices permanently, so a long-lived account legitimately has large gaps
  * between live destinations - an early-exit-on-misses heuristic would skip right
  * past a real bucket sitting beyond the gap.
+ *
+ * Async because a deep scan is seconds of CPU: it yields periodically so the tab
+ * stays responsive instead of locking up.
  */
-export function recoverBucketWalletIndices(
+export async function recoverBucketWalletIndices(
   signature: Hex,
   destinations: readonly `0x${string}`[],
   maxIndex: number = DEFAULT_SCAN_BOUND,
-): BucketWalletRecovery {
+): Promise<BucketWalletRecovery> {
   assertValidIndex(maxIndex)
 
   const wanted = new Map<string, `0x${string}`>()
@@ -169,6 +181,9 @@ export function recoverBucketWalletIndices(
     if (hit) {
       found.push({ address: hit, index })
       wanted.delete(candidate)
+    }
+    if (index > 0 && index % YIELD_EVERY === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 0))
     }
   }
 
