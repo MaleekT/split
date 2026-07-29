@@ -43,6 +43,12 @@ function isValidIndex(v: unknown): v is number {
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
+  // Custom-header CSRF check, matching app/api/bucket-icons and /api/goals:
+  // cross-origin requests cannot set X-Requested-With without a preflight.
+  if (req.headers.get('X-Requested-With') !== 'XMLHttpRequest') {
+    return NextResponse.json({ error: 'Bad request' }, { status: 400 })
+  }
+
   let body: Record<string, unknown>
   try {
     const parsed = await req.json()

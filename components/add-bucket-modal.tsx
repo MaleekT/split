@@ -8,6 +8,7 @@ import { getSplitContract, splitAbi, ZERO_ADDRESS } from '@/lib/contracts'
 import { publicClient } from '@/lib/arc'
 import { pctToBPS } from '@/lib/bps'
 import { parseSplitError } from '@/lib/errors'
+import { useBucketWallets } from '@/hooks/use-bucket-wallets'
 import { IconPicker } from './icon-picker'
 
 interface Props {
@@ -24,6 +25,8 @@ export function AddBucketModal({ onClose }: Props) {
   const { writeContractAsync } = useWriteContract()
   const queryClient = useQueryClient()
 
+  const bucketWallets = useBucketWallets()
+
   const [name, setName]       = useState('')
   const [pctStr, setPctStr]   = useState('')
   const [destStr, setDestStr] = useState('')
@@ -31,6 +34,11 @@ export function AddBucketModal({ onClose }: Props) {
   const [icon, setIcon]       = useState('wallet')
   const [pending, setPending] = useState(false)
   const [error, setError]     = useState<string | null>(null)
+  // 'hold' keeps funds in the contract (destination 0x0, the existing default),
+  // 'manual' is the existing paste-an-address path, 'generated' has Split derive
+  // a wallet it can also spend from.
+  const [destMode, setDestMode] = useState<'hold' | 'manual' | 'generated'>('hold')
+  const [status, setStatus]     = useState<string | null>(null)
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -41,6 +49,13 @@ export function AddBucketModal({ onClose }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+
+    // Generating needs the connected address to read existing destinations and to
+    // own the reservation, so check before doing any work rather than asserting.
+    if (destMode === 'generated' && !address) {
+      setError('Connect your wallet to generate an address for this bucket.')
+      return
+    }
 
     const pct = parseFloat(pctStr)
     if (isNaN(pct) || pct <= 0 || pct > 100) {
@@ -54,13 +69,14 @@ export function AddBucketModal({ onClose }: Props) {
     }
 
     const trimmed = destStr.trim()
-    const destination: `0x${string}` | null =
-      trimmed === '' ? ZERO_ADDRESS
-      : isAddress(trimmed) ? (trimmed as `0x${string}`)
+    let destination: `0x${string}` | null =
+      destMode === 'hold' ? ZERO_ADDRESS
+      : destMode === 'manual' && isAddress(trimmed) ? (trimmed as `0x${string}`)
+      : destMode === 'generated' ? ZERO_ADDRESS  // replaced below, once derived
       : null
 
     if (destination === null) {
-      setError('Enter a valid destination address, or leave empty to hold funds.')
+      setError('Enter a valid destination address, or choose another option.')
       return
     }
 
@@ -76,6 +92,21 @@ export function AddBucketModal({ onClose }: Props) {
 
     setPending(true)
     try {
+      // Derive and reserve BEFORE the on-chain call, because addBucket takes the
+      // destination as an argument. The bucket id does not exist yet, so the
+      // reservation is bound to it after the receipt confirms.
+      let generatedWallet: `0x${string}` | null = null
+      if (destMode === 'generated') {
+        setStatus('Deriving your wallet…')
+        const existing = await publicClient.readContract({
+          address: getSplitContract(), abi: splitAbi, functionName: 'getBuckets', args: [address!],
+        }) as readonly { destination: `0x${string}` }[]
+        const allocated = await bucketWallets.allocateAndReserve(existing.map((b) => b.destination))
+        generatedWallet = allocated.walletAddress
+        destination = allocated.walletAddress
+      }
+
+      setStatus('Confirm in your wallet…')
       const hash = await writeContractAsync({
         address:      getSplitContract(),
         abi:          splitAbi,
@@ -94,6 +125,16 @@ export function AddBucketModal({ onClose }: Props) {
           } catch { /* not a Split event */ }
         }
         if (newId !== null) {
+          // Attach the reservation now the bucket id exists. Best-effort by
+          // design: if this fails the bucket still works and still spends,
+          // because recovery resolves the wallet by scanning indices against
+          // on-chain destinations. Only the badge would be missing.
+          if (generatedWallet) {
+            try {
+              await bucketWallets.bind(generatedWallet, Number(newId))
+            } catch { /* recovery covers this; never block bucket creation on it */ }
+          }
+
           try {
             await fetch('/api/bucket-icons', {
               method:  'POST',
@@ -124,6 +165,7 @@ export function AddBucketModal({ onClose }: Props) {
       setError(parseSplitError(err))
     } finally {
       setPending(false)
+      setStatus(null)
     }
   }
 
@@ -183,18 +225,61 @@ export function AddBucketModal({ onClose }: Props) {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-[var(--split-text-secondary)]" htmlFor="bucket-dest">
-              Destination address{' '}
-              <span className="text-[var(--split-text-tertiary)] font-normal">(optional — leave empty to hold)</span>
-            </label>
-            <input
-              id="bucket-dest"
-              type="text"
-              placeholder="0x…"
-              value={destStr}
-              onChange={(e) => setDestStr(e.target.value)}
-              className={`${inputCls} font-mono`}
-            />
+            <span className="text-xs font-medium text-[var(--split-text-secondary)]">Where this bucket sends</span>
+            <div role="radiogroup" aria-label="Where this bucket sends" className="grid grid-cols-3 gap-1.5">
+              {([
+                ['hold',      'Hold in Split'],
+                ['manual',    'I have a wallet'],
+                ['generated', 'Generate one'],
+              ] as const).map(([mode, label]) => {
+                const selected = destMode === mode
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => { setDestMode(mode); setError(null) }}
+                    className={[
+                      'rounded-xl border px-2 py-2 text-xs font-medium transition',
+                      'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--split-accent)]',
+                      selected
+                        ? 'border-[var(--split-accent)] bg-[var(--split-accent)]/10 text-[var(--split-text-primary)]'
+                        : 'border-[var(--split-border)] bg-[var(--split-bg-secondary)] text-[var(--split-text-secondary)] hover:border-[var(--split-text-tertiary)]',
+                    ].join(' ')}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {destMode === 'manual' && (
+              <input
+                id="bucket-dest"
+                type="text"
+                placeholder="0x…"
+                aria-label="Destination address"
+                value={destStr}
+                onChange={(e) => setDestStr(e.target.value)}
+                className={`${inputCls} font-mono mt-1.5`}
+              />
+            )}
+
+            {destMode === 'hold' && (
+              <p className="text-[11px] leading-relaxed text-[var(--split-text-tertiary)]">
+                Funds stay inside the Split contract until you withdraw them.
+              </p>
+            )}
+
+            {destMode === 'generated' && (
+              <p className="text-[11px] leading-relaxed text-[var(--split-text-tertiary)]">
+                Split creates an address for this bucket and can send from it directly, so
+                paying out takes no separate wallet step. That also means Split can sign for
+                it, so it does not carry the independent confirmation a standalone wallet app
+                would give you. You can recreate it on any device by signing again.
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -241,10 +326,17 @@ export function AddBucketModal({ onClose }: Props) {
             </button>
             <button
               type="submit"
-              disabled={pending || !name.trim() || !pctStr}
+              disabled={
+                pending || !name.trim() || !pctStr ||
+                // Manual needs a valid address, and generating needs a connected
+                // wallet to own the reservation. Blocked here rather than failing
+                // after the user has already committed to submitting.
+                (destMode === 'manual' && !isAddress(destStr.trim())) ||
+                (destMode === 'generated' && !address)
+              }
               className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-[#111110] hover:opacity-85 transition-opacity disabled:opacity-40"
             >
-              {pending ? 'Adding…' : 'Add bucket'}
+              {pending ? (status ?? 'Adding…') : 'Add bucket'}
             </button>
           </div>
         </form>
