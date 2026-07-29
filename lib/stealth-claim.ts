@@ -77,6 +77,53 @@ function walletFor(stealthPrivateKey: `0x${string}`): WalletClient {
   })
 }
 
+/**
+ * Whether a failure is the RPC throttling or dropping the request, rather than the
+ * transaction itself being wrong. Retrying these is safe; retrying a genuine
+ * revert would just fail again.
+ */
+export function isTransientRpcError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return /request limit|rate limit|too many requests|-32011|429|timeout|timed out|fetch failed|network|socket|ECONNRESET/i.test(msg)
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
+const RECEIPT_ATTEMPTS  = 5
+const RECEIPT_BACKOFF_MS = 3_000
+
+/**
+ * Wait for a receipt, surviving a throttled or flaky RPC.
+ *
+ * This matters more than it looks. The transaction is ALREADY broadcast by the
+ * time we get here, so a failure to read its receipt does not mean the transfer
+ * failed - and treating it as failure is exactly what made a landed claim report
+ * "RPC Request failed" while the funds had in fact moved.
+ *
+ * Polling by hash is idempotent, so retrying is always safe. Only a receipt that
+ * actually says `reverted` is a real failure; anything else is retried, and if the
+ * RPC never answers we throw an error that says the funds may well have moved.
+ */
+async function waitForReceipt(hash: `0x${string}`): Promise<void> {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= RECEIPT_ATTEMPTS; attempt++) {
+    try {
+      const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 60_000 })
+      if (receipt.status === 'reverted') throw new Error(`Transaction ${hash} reverted on-chain`)
+      return
+    } catch (e) {
+      // A revert is a real, final failure - never retry it.
+      if (e instanceof Error && /reverted on-chain/.test(e.message)) throw e
+      lastError = e
+      if (!isTransientRpcError(e) || attempt === RECEIPT_ATTEMPTS) break
+      await sleep(RECEIPT_BACKOFF_MS * attempt)
+    }
+  }
+  throw new Error(
+    `Could not confirm transaction ${hash} because the network kept refusing the request. It may well have gone through - check your balance before retrying. (${lastError instanceof Error ? lastError.message : String(lastError)})`,
+  )
+}
+
 /** Current gas price, with a fallback so a flaky RPC cannot block a claim. */
 export async function gasPriceWei(): Promise<bigint> {
   try { return await publicClient.getGasPrice() } catch { return 20_000_000_000n } // 20 gwei fallback
@@ -109,7 +156,7 @@ export async function quickClaim(params: {
     address: USDC, abi: erc20Abi, functionName: 'approve', args: [split, maxUint256],
     chain: arcTestnet, account: wallet.account!,
   })
-  await publicClient.waitForTransactionReceipt({ hash: approveTx, timeout: 60_000 })
+  await waitForReceipt(approveTx)
 
   // 2. Fresh balance after the approve gas, then size the claim against a real
   //    depositFor estimate.
@@ -136,7 +183,7 @@ export async function quickClaim(params: {
     address: split, abi: splitAbi, functionName: 'depositFor',
     args: [params.mainAddress, amountRaw], chain: arcTestnet, account: wallet.account!,
   })
-  await publicClient.waitForTransactionReceipt({ hash: claimTx, timeout: 60_000 })
+  await waitForReceipt(claimTx)
 
   return { approveTx, claimTx, amountRaw }
 }
@@ -204,7 +251,7 @@ export async function privateClaim(params: {
       address: USDC, abi: erc20TransferAbi, functionName: 'transfer', args: [t.destination, t.amount],
       chain: arcTestnet, account: wallet.account!,
     })
-    await publicClient.waitForTransactionReceipt({ hash: tx, timeout: 60_000 })
+    await waitForReceipt(tx)
     transfers.push(tx)
     // Counted only after the receipt confirms, so a mid-sequence failure reports
     // what actually moved rather than what was planned.
@@ -249,7 +296,7 @@ export async function sweepVaultToMain(params: {
     args: [params.mainAddress, amountRaw],
     chain: arcTestnet, account: wallet.account!,
   })
-  await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 60_000 })
+  await waitForReceipt(txHash)
 
   return { txHash, amountRaw }
 }

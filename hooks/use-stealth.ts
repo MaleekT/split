@@ -12,6 +12,7 @@ import {
   type QuickClaimResult,
   type PrivateClaimResult,
   sweepVaultToMain,
+  isTransientRpcError,
 } from '@/lib/stealth-claim'
 import { claimReserveRaw, isDustAmount, computeClaimPlan, type ClaimBucket } from '@/lib/claim-math'
 import { arcTestnet } from '@/lib/chain'
@@ -101,14 +102,11 @@ const CLAIM_BACKOFF_MS   = 4_000
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
-/**
- * Whether a failure is the RPC throttling us rather than the claim being wrong.
- * Retrying these is safe; retrying a genuine revert would just fail again.
- */
-function isRateLimited(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err)
-  return /request limit|rate limit|too many requests|-32011|429/i.test(msg)
-}
+// Transient-failure detection lives in lib/stealth-claim so the executor's receipt
+// polling and this outer retry share one definition. They previously diverged:
+// this copy matched only throttling, missing the timeouts and dropped connections
+// that also strand a claim.
+const isRateLimited = isTransientRpcError
 
 const ANNOUNCE_PAGE = 500
 // Hard bound on scan pages so a misbehaving hasMore can never loop forever
