@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAccount } from 'wagmi'
-import { ShieldCheck, Loader2, ScanLine, Eye, EyeOff, Globe, Copy, Check, Vault as VaultIcon } from 'lucide-react'
+import { ShieldCheck, Loader2, ScanLine, Eye, Clock, Vault as VaultIcon } from 'lucide-react'
 import { formatUnits } from 'viem'
 import { formatUsdc, shortAddress } from '@/lib/format'
 import { useStealth, type DetectedPayment, type ClaimAllProgress } from '@/hooks/use-stealth'
@@ -31,8 +31,6 @@ export default function PrivacyPage() {
   const stealth = useStealth()
 
   const [enabled, setEnabled]   = useState<boolean | null>(null)
-  const [handle, setHandle]     = useState<string | null>(null)
-  const [linkToken, setLinkToken] = useState<string | null>(null)
   const [enabling, setEnabling] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [payments, setPayments] = useState<DetectedPayment[] | null>(null)
@@ -45,6 +43,9 @@ export default function PrivacyPage() {
   // its balance, since a claim that routes funds into the Vault has no other way
   // to tell the card its number is now stale.
   const [claimVersion, setClaimVersion]   = useState(0)
+  // Total a Private Claim would leave behind at its stealth address, because there
+  // is no Vault to receive the hold-bucket portion. Null while not yet computed.
+  const [deferredTotal, setDeferredTotal] = useState<bigint | null>(null)
   const [error, setError]       = useState<string | null>(null)
   const mounted = useRef(true)
   useEffect(() => () => { mounted.current = false }, [])
@@ -53,22 +54,12 @@ export default function PrivacyPage() {
     if (!stealth.address) return
     const addr = encodeURIComponent(stealth.address)
     try {
-      // Privacy status and handle load together: the private pay link needs the
-      // handle, and showing the link a beat after the status reads as a glitch.
-      const [statusRes, profileRes] = await Promise.all([
-        fetch(`/api/stealth/${addr}`),
-        fetch(`/api/profile?address=${addr}`),
-      ])
+      // Only the enabled flag is needed here now. The handle and link token moved
+      // to Profile along with the pay links, so this no longer fetches them.
+      const statusRes = await fetch(`/api/stealth/${addr}`)
       if (!statusRes.ok) throw new Error('status lookup failed')
-      const body = await statusRes.json() as { data?: { metaAddress: string | null; linkToken: string | null } }
-      if (mounted.current) {
-        setEnabled(!!body.data?.metaAddress)
-        setLinkToken(body.data?.linkToken ?? null)
-      }
-      if (profileRes.ok) {
-        const p = await profileRes.json() as { data?: { handle: string | null } | null }
-        if (mounted.current) setHandle(p.data?.handle ?? null)
-      }
+      const body = await statusRes.json() as { data?: { metaAddress: string | null } }
+      if (mounted.current) setEnabled(!!body.data?.metaAddress)
     } catch {
       if (mounted.current) setEnabled(false)
     }
@@ -106,6 +97,28 @@ export default function PrivacyPage() {
   const dust           = (payments ?? []).filter((p) => p.isDust)
   const claimableTotal = claimable.reduce((acc, p) => acc + p.amountRaw, 0n)
 
+  // Work out how much a Private Claim would have to leave behind. Only meaningful
+  // without a Vault: with one, every hold portion has somewhere to go and nothing
+  // defers. Recomputed after each scan and after each claim.
+  const vaultAddress = stealth.vaultAddress
+  useEffect(() => {
+    let alive = true
+    if (vaultAddress || claimable.length === 0) { setDeferredTotal(vaultAddress ? 0n : null); return }
+    void (async () => {
+      try {
+        const parts = await Promise.all(claimable.map((p) => stealth.previewPrivateClaim(p)))
+        const total = parts.reduce((acc, r) => acc + r.holdPortionRaw, 0n)
+        if (alive && mounted.current) setDeferredTotal(total)
+      } catch {
+        // Leave it unknown rather than showing a confident zero: claiming to have
+        // nothing deferred when the check failed is the misleading direction.
+        if (alive && mounted.current) setDeferredTotal(null)
+      }
+    })()
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vaultAddress, claimVersion, payments])
+
   async function handleClaimAll(mode: 'quick' | 'private', useVault: boolean) {
     setClaimAllOpen(false)
     setClaimingAll(true); setClaimAllError(null); setClaimProgress(null)
@@ -136,32 +149,31 @@ export default function PrivacyPage() {
       <header style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>Private payments</h1>
         <p style={{ fontSize: 14, color: 'var(--text-2)', marginTop: 2 }}>
-          Let people pay your link without leaving a public trail that ties every payment back to you.
+          Payments made to your private link arrive at fresh one-time addresses. Scan to find them,
+          then claim them into your buckets or your Vault. Only you can detect them, using keys held
+          on this device.
         </p>
       </header>
 
       {error && <p role="alert" style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 12 }}>{error}</p>}
 
-      {/* Enable / status */}
-      <section style={card()}>
-        {enabled === null ? (
+      {/* Setup, shown only until privacy is enabled. There is deliberately no
+          "private payments are on" state: under two permanent pay links there is
+          no toggle to report, so once set up this section simply goes away.
+          The button stays because this is the only place registration happens. */}
+      {enabled === null ? (
+        <section style={card()}>
           <div style={{ display: 'flex', justifyContent: 'center', padding: 12, color: 'var(--text-3)' }}><Loader2 className="animate-spin" size={18} /></div>
-        ) : enabled ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={badge('var(--accent)')}><ShieldCheck size={18} /></div>
-            <div>
-              <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Private payments are on</p>
-              <p style={{ fontSize: 13, color: 'var(--text-2)' }}>Your pay link now receives at fresh one-time addresses only you can detect.</p>
-            </div>
-          </div>
-        ) : (
+        </section>
+      ) : !enabled ? (
+        <section style={card()}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
               <div style={badge('var(--accent)')}><ShieldCheck size={18} /></div>
               <div>
                 <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Turn on private payments</p>
                 <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5 }}>
-                  You&apos;ll sign a message to create your private receiving keys (they stay on your device), then publish a one-time meta-address. After that, anyone paying your link pays privately.
+                  You&apos;ll sign a message to create your private receiving keys (they stay on your device), then publish a one-time meta-address. After that you get a private pay link, alongside your normal one, on your Profile.
                 </p>
               </div>
             </div>
@@ -169,12 +181,8 @@ export default function PrivacyPage() {
               {enabling ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}><Loader2 size={15} className="animate-spin" /> Setting up…</span> : 'Enable private payments'}
             </button>
           </div>
-        )}
-      </section>
-
-      {/* Pay links: the two links are shown together so the difference between
-          them is obvious at the moment of sharing, not buried in docs. */}
-      {enabled && handle && <PayLinks handle={handle} linkToken={linkToken} />}
+        </section>
+      ) : null}
 
       {/* Private balance */}
       {enabled && (
@@ -237,6 +245,30 @@ export default function PrivacyPage() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Pending private claim: the hold-bucket share that a Private
+                      Claim cannot move without a Vault, so it stays at its stealth
+                      address. Shown on its own and never folded into the headline
+                      above, because it is not claimable in the state the account is
+                      currently in - counting it would overstate what can be moved
+                      today. It is also excluded from Total Balance on the
+                      dashboard, along with every other stealth-held amount. */}
+                  {deferredTotal !== null && deferredTotal > 0n && (
+                    <div style={{ marginTop: 12, borderTop: '0.5px solid var(--border)', paddingTop: 10, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                      <Clock size={14} style={{ color: '#8B7CF6', flexShrink: 0, marginTop: 2 }} />
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>
+                          {fmt(deferredTotal)} USDC waiting on a Private Vault
+                        </p>
+                        <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2, lineHeight: 1.5 }}>
+                          This is the share of your payments routed to buckets that hold in the
+                          contract. A Private Claim will not send it to your main wallet, so it
+                          stays at its stealth address until you set up a Vault below. Your funds,
+                          just not moved yet.
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Dust: real funds, but the claim's own gas reserve exceeds
                       them, so no claim can ever succeed. Shown rather than hidden
@@ -302,12 +334,6 @@ export default function PrivacyPage() {
 
 // ── Pay links ─────────────────────────────────────────────────────────────────
 
-interface PayLinkRowProps {
-  label:    string
-  hint:     string
-  href:     string
-  tone:     'public' | 'private'
-}
 
 /**
  * Mode chooser for a batch claim. The same Quick/Private decision the single
@@ -410,43 +436,6 @@ function ModeOption({ selected, onSelect, title, body }: {
   )
 }
 
-function PayLinks({ handle, linkToken }: { handle: string; linkToken: string | null }) {
-  const [origin, setOrigin] = useState('')
-  // window is unavailable during SSR; read it after mount so the links render
-  // against the real deployment origin (preview URLs included).
-  useEffect(() => { setOrigin(window.location.origin) }, [])
-
-  const encoded = encodeURIComponent(handle)
-  return (
-    <section style={{ ...card(), marginTop: 16 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Your pay links</h2>
-      <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2, marginBottom: 12 }}>
-        Two separate links. Share whichever fits the payment - nothing to switch on or off.
-      </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {linkToken && (
-          <PayLinkRow
-            tone="private"
-            label="Private link"
-            hint="Each payment lands at a fresh one-time address only you can detect. The link looks ordinary - it does not reveal that it is private."
-            href={`${origin}/pay/${linkToken}`}
-          />
-        )}
-        <PayLinkRow
-          tone="public"
-          label="Normal link"
-          hint="Ordinary transfer, publicly visible on-chain. Splits across your buckets."
-          href={`${origin}/pay/${encoded}`}
-        />
-      </div>
-      {!linkToken && (
-        <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 10, lineHeight: 1.5 }}>
-          Your private link is still being set up. Reload in a moment, or turn private payments on again to generate it.
-        </p>
-      )}
-    </section>
-  )
-}
 
 // ── Private Vault ─────────────────────────────────────────────────────────────
 // The Vault address is derived in the browser and held in session memory only. It
@@ -593,77 +582,6 @@ function VaultCard({ stealth, refreshSignal }: {
   )
 }
 
-function PayLinkRow({ label, hint, href, tone }: PayLinkRowProps) {
-  const [copied, setCopied] = useState(false)
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
-
-  const accent = tone === 'private' ? '#8B7CF6' : 'var(--accent)'
-
-  async function copy() {
-    if (!href) return
-    try {
-      await navigator.clipboard.writeText(href)
-      setCopied(true)
-      if (timer.current) clearTimeout(timer.current)
-      timer.current = setTimeout(() => setCopied(false), 2_000)
-    } catch {
-      // Clipboard can be blocked by permissions; the link stays selectable.
-    }
-  }
-
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 13px',
-      borderRadius: 12, background: 'var(--bg-3)',
-      border: `0.5px solid ${tone === 'private' ? 'rgba(139,124,246,.3)' : 'var(--border)'}`,
-    }}>
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          {tone === 'private' ? <EyeOff size={13} style={{ color: accent, flexShrink: 0 }} />
-                              : <Globe size={13} style={{ color: 'var(--text-3)', flexShrink: 0 }} />}
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{label}</span>
-          {/* The two links differ only by a URL suffix, so the mode is stated in
-              words - never left to colour alone. */}
-          <span style={{
-            fontSize: 9.5, fontWeight: 800, letterSpacing: '.06em', padding: '2px 6px',
-            borderRadius: 999, flexShrink: 0,
-            background: tone === 'private' ? 'rgba(139,124,246,.14)' : 'var(--bg-2)',
-            color:      tone === 'private' ? accent : 'var(--text-3)',
-            border: `0.5px solid ${tone === 'private' ? 'rgba(139,124,246,.35)' : 'var(--border)'}`,
-          }}>{tone === 'private' ? 'PRIVATE' : 'PUBLIC'}</span>
-        </div>
-        {/* On copy the hint is replaced by a confirmation that names the mode, so
-            a distracted copy cannot be mistaken for the other link. */}
-        <p role="status" aria-live="polite" style={{
-          fontSize: 11.5, marginTop: 3, marginBottom: 5, lineHeight: 1.45,
-          color: copied ? accent : 'var(--text-2)',
-          fontWeight: copied ? 700 : 400,
-        }}>
-          {copied
-            ? `Copied the ${label.toLowerCase()}: ${tone === 'private' ? 'payments here stay private' : 'payments here are public'}`
-            : hint}
-        </p>
-        <span style={{
-          display: 'block', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)',
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>{href || ' '}</span>
-      </div>
-      <button type="button" onClick={copy} disabled={!href}
-        aria-label={`Copy ${label.toLowerCase()}`}
-        style={{
-          height: 34, padding: '0 12px', borderRadius: 9, flexShrink: 0,
-          border: `0.5px solid ${tone === 'private' ? 'rgba(139,124,246,.35)' : 'var(--border)'}`,
-          background: 'var(--bg-2)', color: copied ? accent : 'var(--text-2)',
-          fontSize: 12, fontWeight: 700, cursor: href ? 'pointer' : 'not-allowed',
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-        }}>
-        {copied ? <Check size={13} /> : <Copy size={13} />}
-        {copied ? 'Copied' : 'Copy'}
-      </button>
-    </div>
-  )
-}
 
 function card(): React.CSSProperties {
   return { background: 'var(--bg-2)', border: '0.5px solid var(--border)', borderRadius: 16, padding: 18 }

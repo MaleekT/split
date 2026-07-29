@@ -7,6 +7,7 @@ import { isValidHandle } from '@/lib/handle'
 import { Camera, Copy, Share2, X as XIcon } from 'lucide-react'
 import QRCode from 'qrcode'
 import { QrModal } from '@/components/qr-modal'
+import { PayLinks } from '@/components/pay-links'
 
 type Availability = 'idle' | 'checking' | 'available' | 'taken' | 'invalid'
 
@@ -346,6 +347,9 @@ export default function ProfilePage() {
 
   /* ── new state ────────────────────────────────────────────────────── */
   const [showShareLink, setShowShareLink] = useState(true)
+  // The private pay link's opaque token. Null until privacy is enabled, in which
+  // case PayLinks shows only the normal link.
+  const [payLinkToken, setPayLinkToken] = useState<string | null>(null)
   const [copiedLink,    setCopiedLink]    = useState(false)
   const [igCopied,      setIgCopied]      = useState(false)
   const [qrDataUrl,     setQrDataUrl]     = useState<string | null>(null)
@@ -394,6 +398,22 @@ export default function ProfilePage() {
       .catch(() => {})
     return () => { cancelled = true }
   }, [savedHandle])
+
+  /* ── private pay-link token ───────────────────────────────────────── */
+  // Null covers both "privacy not enabled" and "lookup failed": PayLinks then
+  // shows the normal link alone, which is accurate either way, rather than
+  // rendering a private link that would not resolve.
+  useEffect(() => {
+    if (!address) { setPayLinkToken(null); return }
+    let cancelled = false
+    fetch(`/api/stealth/${encodeURIComponent(address)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body: { data?: { linkToken: string | null } } | null) => {
+        if (!cancelled && mounted.current) setPayLinkToken(body?.data?.linkToken ?? null)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [address])
 
   /* ── existing handlers ────────────────────────────────────────────── */
   function changeHandle(raw: string) {
@@ -662,6 +682,11 @@ export default function ProfilePage() {
               </div>
             </div>
           )}
+
+          {/* Both pay links. They live here rather than on Privacy because they
+              are not a privacy setting: both exist permanently, and this is where
+              the rest of a user's shareable identity already is. */}
+          {savedHandle && <PayLinks handle={savedHandle} linkToken={payLinkToken} />}
 
           {/* Social Blast Matrix */}
           {savedHandle && (
