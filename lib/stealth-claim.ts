@@ -24,7 +24,7 @@ import {
 
 // erc20Abi in lib/contracts.ts (no-touch) has approve/balanceOf/allowance but not
 // transfer, which Private Claim needs; define it locally.
-const erc20TransferAbi = [{
+export const erc20TransferAbi = [{
   name: 'transfer', type: 'function', stateMutability: 'nonpayable',
   inputs: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }],
   outputs: [{ name: '', type: 'bool' }],
@@ -104,7 +104,7 @@ const RECEIPT_BACKOFF_MS = 3_000
  * actually says `reverted` is a real failure; anything else is retried, and if the
  * RPC never answers we throw an error that says the funds may well have moved.
  */
-async function waitForReceipt(hash: `0x${string}`): Promise<void> {
+export async function waitForReceipt(hash: `0x${string}`): Promise<void> {
   let lastError: unknown
   for (let attempt = 1; attempt <= RECEIPT_ATTEMPTS; attempt++) {
     try {
@@ -127,6 +127,32 @@ async function waitForReceipt(hash: `0x${string}`): Promise<void> {
 /** Current gas price, with a fallback so a flaky RPC cannot block a claim. */
 export async function gasPriceWei(): Promise<bigint> {
   try { return await publicClient.getGasPrice() } catch { return 20_000_000_000n } // 20 gwei fallback
+}
+
+/**
+ * How much an address can actually send, in 6-decimal USDC units, after leaving
+ * gas for one transfer.
+ *
+ * On Arc an address's USDC balance IS its native gas balance - one pot - so a
+ * "send everything" that moved the full balance would leave nothing to pay for the
+ * transaction and simply fail. Shared by claims and by generated-wallet sends so
+ * both reserve against identical numbers.
+ *
+ * A failed getBalance deliberately THROWS rather than falling back, unlike
+ * gasPriceWei above. That asymmetry is the point: over-estimating gas is
+ * conservative and harmless, but there is no safe default for a balance. Returning
+ * 0n would report funds as unspendable when they are not, and would silently zero
+ * out a "send max". A visible error the caller can retry beats a confidently wrong
+ * number - the same reason a locked Vault renders as unknown, never as zero.
+ */
+export async function sendableBalanceRaw(
+  address: `0x${string}`,
+  price: bigint,
+): Promise<bigint> {
+  const balanceWei = await publicClient.getBalance({ address })
+  const reserve    = reserveWei(FALLBACK_TRANSFER_GAS, price)
+  if (balanceWei <= reserve) return 0n
+  return (balanceWei - reserve) / NATIVE_PER_USDC
 }
 
 /** Native wei to reserve for `gasUnits` of work, with margin. */
