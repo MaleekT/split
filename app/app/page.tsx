@@ -19,7 +19,7 @@ import { InsightsCard } from '@/components/insights-card'
 import { AllocationOverview } from '@/components/allocation-overview'
 import { CoinGraphic } from '@/components/coin-graphic'
 import { BucketCard } from '@/components/bucket-card'
-import { TotalBalanceCard } from '@/components/total-balance-card'
+import { useSplitTotal } from '@/hooks/use-split-total'
 import { BucketWalletSendModal } from '@/components/bucket-wallet-send-modal'
 import { useBucketWallets, type GeneratedBucketWallet } from '@/hooks/use-bucket-wallets'
 import { AddBucketModal } from '@/components/add-bucket-modal'
@@ -96,7 +96,11 @@ export default function DashboardPage() {
   const buckets        = (data?.[0]?.result ?? []) as SplitBucket[]
   const walletBal      = (data?.[1]?.result ?? 0n) as bigint
   const allowance      = (data?.[2]?.result ?? 0n) as bigint
-  const totalBal  = buckets.reduce((sum, b) => sum + b.balance, 0n)
+  const holdTotal = buckets.reduce((sum, b) => sum + b.balance, 0n)
+  // One figure for everything Split accounts for: held in the contract, the Vault,
+  // and every wallet-bucket destination. Generated and manually-added destinations
+  // count the same - this is what Split has processed, not a net-worth number.
+  const { total: totalBal, isPartial, vaultLocked } = useSplitTotal(buckets, holdTotal)
 
   const [depositStr, setDepositStr]     = useState('')
   const [noteStr, setNoteStr]           = useState('')
@@ -215,15 +219,6 @@ export default function DashboardPage() {
       <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
         {/* ── LEFT COLUMN ── */}
         <div className="flex flex-col gap-5 min-w-0">
-          {/* Total Balance. Additive: the two figures below keep their existing
-              meanings, this one aggregates across them plus wallets Split can see. */}
-          <TotalBalanceCard
-            buckets={buckets}
-            holdTotal={totalBal}
-            generated={generatedWallets}
-            mask={mask}
-          />
-
           {/* Total in Split card */}
           <section className="relative overflow-hidden" style={{ background: 'var(--bg-2)', border: '0.5px solid var(--border)', borderRadius: 16, padding: 24 }}>
             <CoinGraphic className="hidden sm:block absolute top-1 right-1 w-40 h-40 pointer-events-none" />
@@ -244,6 +239,18 @@ export default function DashboardPage() {
                 <UsdcAmount value={totalBal} className="block font-bold leading-none text-[clamp(2rem,4vw,3rem)] mt-1" />
               )}
               <p className="font-mono" style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 6 }}>≈ ${mask(formatUsdc(totalBal))} USD</p>
+
+              {/* A locked Vault means part of the total is unknown, not zero.
+                  Saying so keeps the figure honest: silently omitting the Vault
+                  would understate the real total, which is the bug this warning
+                  already exists to prevent. */}
+              {!isLoading && isPartial && (
+                <p role="status" aria-live="polite" style={{ fontSize: 11.5, lineHeight: 1.5, color: 'var(--warning, #FBBF24)', marginTop: 6, maxWidth: 320 }}>
+                  {vaultLocked
+                    ? 'Partial: your Private Vault is locked, so its balance is not counted yet. Open it on the Privacy page to include it.'
+                    : 'Partial: some balances could not be read just now.'}
+                </p>
+              )}
 
               <p style={{ fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-3)', marginTop: 16 }}>Wallet balance</p>
               <div className="flex items-center gap-2" style={{ marginTop: 2 }}>
