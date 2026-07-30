@@ -8,6 +8,7 @@ import { publicClient } from '@/lib/arc'
 import { parseSplitError } from '@/lib/errors'
 import { bpsToPCT } from '@/lib/bps'
 import { canAbsorbReduction } from '@/lib/allocation'
+import { useScrollLock } from '@/hooks/use-scroll-lock'
 
 // Freeing room for a new bucket without leaving the Add Bucket form.
 //
@@ -44,6 +45,10 @@ export function ReduceAllocationModal({ buckets, neededBps, onCancel, onReduced 
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
   }, [onCancel, pending])
+
+  // Stacks on top of Add Bucket, which has already locked the body. The count
+  // makes unmount order irrelevant: scrolling returns only once both are gone.
+  useScrollLock()
 
   // Highest allocation first: the bucket most able to absorb the reduction leads.
   const ordered = [...buckets].filter((b) => b.active).sort((a, b) => b.bps - a.bps)

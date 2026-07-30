@@ -5,6 +5,7 @@ import { isAddress, decodeEventLog, parseUnits } from 'viem'
 import { useWriteContract, useAccount } from 'wagmi'
 import { useQueryClient } from '@tanstack/react-query'
 import { getSplitContract, splitAbi, ZERO_ADDRESS, type SplitBucket } from '@/lib/contracts'
+import { useScrollLock } from '@/hooks/use-scroll-lock'
 import { ReduceAllocationModal } from './reduce-allocation-modal'
 import { bpsToFree } from '@/lib/allocation'
 import { publicClient } from '@/lib/arc'
@@ -71,6 +72,11 @@ export function AddBucketModal({ onClose }: Props) {
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
   }, [onClose])
+
+  // Stops the dashboard scrolling behind the dialog, which otherwise moves the
+  // page out from under the user mid-form. Counted, because the allocation
+  // reducer stacks on top of this one.
+  useScrollLock()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

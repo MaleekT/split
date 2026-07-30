@@ -4,6 +4,7 @@ import { PieChart } from 'lucide-react'
 import type { SplitBucket } from '@/lib/contracts'
 import { ZERO_ADDRESS } from '@/lib/contracts'
 import { bpsToPCT } from '@/lib/bps'
+import { BPS_TOTAL } from '@/lib/allocation'
 import { formatUsdc } from '@/lib/format'
 import { UsdcAmount } from './usdc-amount'
 
@@ -25,6 +26,11 @@ export function AllocationOverview({ buckets, routedTotals }: Props) {
   })
   const total = rows.reduce((sum, r) => sum + r.amount, 0n)
 
+  // Only active buckets count toward the ceiling, matching the contract's
+  // _sumBPS, so a paused bucket does not appear to consume allocation it is not.
+  const usedBps = buckets.filter((b) => b.active).reduce((sum, b) => sum + b.bps, 0)
+  const isFull  = usedBps >= BPS_TOTAL
+
   return (
     <section style={{ background: 'var(--bg-2)', border: '0.5px solid var(--border)', borderRadius: 14, padding: 20 }}>
       <div className="flex items-center gap-2" style={{ marginBottom: 16 }}>
@@ -40,8 +46,23 @@ export function AllocationOverview({ buckets, routedTotals }: Props) {
         <span className="font-mono" style={{ fontSize: 12, color: 'var(--text-3)' }}>≈ ${formatUsdc(total)} USD</span>
       </div>
 
+      {/* How much of the 100% is spoken for. Surfaced here so the ceiling is
+          visible before opening Add Bucket, rather than discovered on submit when
+          addBucket reverts with ExceedsBPS. */}
+      <div className="flex items-baseline justify-between gap-2" style={{ marginTop: 16 }}>
+        <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-3)' }}>
+          Allocation used
+        </span>
+        <span className="font-mono tabular-nums" style={{ fontSize: 12.5, fontWeight: 700, color: isFull ? 'var(--accent)' : 'var(--text)' }}>
+          {bpsToPCT(usedBps)}%
+          <span style={{ fontWeight: 500, color: 'var(--text-3)' }}>
+            {isFull ? ' · all used' : ` · ${bpsToPCT(BPS_TOTAL - usedBps)}% free`}
+          </span>
+        </span>
+      </div>
+
       {/* Stacked allocation bar */}
-      <div className="flex overflow-hidden" style={{ height: 10, borderRadius: 999, marginTop: 16, background: 'var(--bg-3)' }}>
+      <div className="flex overflow-hidden" style={{ height: 10, borderRadius: 999, marginTop: 8, background: 'var(--bg-3)' }}>
         {rows.map((r) => (
           <div key={r.id} style={{ width: `${r.pct}%`, background: r.color }} title={`${r.name} ${r.pct}%`} />
         ))}
