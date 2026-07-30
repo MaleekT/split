@@ -58,7 +58,17 @@ export function useSplitTotal(buckets: readonly SplitBucket[], holdTotal: bigint
     contracts: addresses.map((a) => ({
       address: USDC, abi: erc20Abi, functionName: 'balanceOf', args: [a],
     } as const)),
-    query: { enabled: addresses.length > 0, refetchInterval: 30_000 },
+    query: {
+      enabled: addresses.length > 0,
+      refetchInterval: 30_000,
+      // Arc's public RPC rate-limits concurrent reads: at 25 in flight it returns
+      // HTTP 429 for roughly a third and drops the odd connection outright, which
+      // surfaces in the browser as "Failed to fetch". A dashboard load issues far
+      // more reads than it used to, so retry the throttled ones with backoff
+      // instead of immediately declaring the total partial over a transient blip.
+      retry: 3,
+      retryDelay: (attempt) => Math.min(1_000 * 2 ** attempt, 8_000),
+    },
   })
 
   return useMemo(() => {
