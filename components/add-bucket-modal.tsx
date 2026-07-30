@@ -98,12 +98,23 @@ export function AddBucketModal({ onClose }: Props) {
       let generatedWallet: `0x${string}` | null = null
       if (destMode === 'generated') {
         setStatus('Deriving your wallet…')
-        const existing = await publicClient.readContract({
-          address: getSplitContract(), abi: splitAbi, functionName: 'getBuckets', args: [address!],
-        }) as readonly { destination: `0x${string}` }[]
-        const allocated = await bucketWallets.allocateAndReserve(existing.map((b) => b.destination))
-        generatedWallet = allocated.walletAddress
-        destination = allocated.walletAddress
+        try {
+          const existing = await publicClient.readContract({
+            address: getSplitContract(), abi: splitAbi, functionName: 'getBuckets', args: [address!],
+          }) as readonly { destination: `0x${string}` }[]
+          const allocated = await bucketWallets.allocateAndReserve(existing.map((b) => b.destination))
+          generatedWallet = allocated.walletAddress
+          destination = allocated.walletAddress
+        } catch (err) {
+          // Surfaced directly rather than through parseSplitError, which only
+          // understands Solidity custom errors and turns everything else into
+          // "Something went wrong" - hiding the actual cause. Nothing has been
+          // sent on-chain at this point, so there is nothing to unwind.
+          setError(err instanceof Error ? err.message : 'Could not prepare a generated wallet')
+          setPending(false)
+          setStatus(null)
+          return
+        }
       }
 
       setStatus('Confirm in your wallet…')

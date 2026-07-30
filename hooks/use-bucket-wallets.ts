@@ -117,7 +117,10 @@ export function useBucketWallets() {
       const walletAddress = deriveBucketWalletAddress(signature, index)
       const res = await fetch('/api/bucket-wallets/reserve', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // X-Requested-With is REQUIRED: both write routes reject without it, the
+        // same CSRF guard /api/bucket-icons and /api/goals use. Omitting it makes
+        // every reserve return 400, which surfaces as a generic failure.
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
         body:    JSON.stringify({ address, walletAddress, derivationIndex: index }),
       })
 
@@ -144,7 +147,9 @@ export function useBucketWallets() {
     if (!address) throw new Error('Connect your wallet first')
     const res = await fetch('/api/bucket-wallets/bind', {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // Same CSRF guard as reserve. Without it bind returns 400 and the bucket is
+      // created but never labelled as generated.
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
       body:    JSON.stringify({ address, walletAddress, bucketId }),
     })
     if (!res.ok) {
