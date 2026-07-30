@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { isAddress, decodeEventLog, parseUnits } from 'viem'
 import { useWriteContract, useAccount } from 'wagmi'
 import { useQueryClient } from '@tanstack/react-query'
-import { getSplitContract, splitAbi, ZERO_ADDRESS } from '@/lib/contracts'
+import { getSplitContract, splitAbi, ZERO_ADDRESS, type SplitBucket } from '@/lib/contracts'
+import { ReduceAllocationModal } from './reduce-allocation-modal'
+import { bpsToFree } from '@/lib/allocation'
 import { publicClient } from '@/lib/arc'
 import { pctToBPS } from '@/lib/bps'
 import { parseSplitError } from '@/lib/errors'
@@ -40,6 +42,30 @@ export function AddBucketModal({ onClose }: Props) {
   const [destMode, setDestMode] = useState<'hold' | 'manual' | 'generated'>('hold')
   const [status, setStatus]     = useState<string | null>(null)
 
+  // Existing buckets, so the allocation can be checked against the 100% ceiling
+  // BEFORE submitting rather than discovering ExceedsBPS after the form is filled.
+  const [existingBuckets, setExistingBuckets] = useState<readonly SplitBucket[]>([])
+  const [reduceOpen, setReduceOpen] = useState(false)
+
+  const loadBuckets = useCallback(async () => {
+    if (!address) return
+    try {
+      const rows = await publicClient.readContract({
+        address: getSplitContract(), abi: splitAbi, functionName: 'getBuckets', args: [address],
+      }) as readonly SplitBucket[]
+      setExistingBuckets(rows)
+    } catch {
+      // Non-fatal: without this the ceiling check is skipped and the contract
+      // still rejects an over-allocation, just later and less helpfully.
+    }
+  }, [address])
+
+  useEffect(() => { void loadBuckets() }, [loadBuckets])
+
+  const currentTotalBps = existingBuckets
+    .filter((b) => b.active)
+    .reduce((sum, b) => sum + b.bps, 0)
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', handler)
@@ -65,6 +91,14 @@ export function AddBucketModal({ onClose }: Props) {
     const bps = pctToBPS(pct)
     if (bps <= 0 || bps > 10_000) {
       setError('Allocation must be between 0.01% and 100%.')
+      return
+    }
+
+    // Buckets must total exactly 100%, so an over-allocation would revert with
+    // ExceedsBPS on submit. Offer to free the room here instead of sending the
+    // user away to edit another bucket and re-enter this whole form.
+    if (currentTotalBps + bps > 10_000) {
+      setReduceOpen(true)
       return
     }
 
@@ -189,8 +223,12 @@ export function AddBucketModal({ onClose }: Props) {
     >
       <div aria-hidden="true" className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} />
 
-      <div className="relative w-full max-w-md rounded-2xl bg-[var(--split-bg-primary)] shadow-2xl p-6 space-y-5">
-        <div>
+      {/* Capped to the viewport with the title and action row pinned, so the form
+          can grow without pushing "Add bucket" off-screen where it cannot be
+          reached. dvh rather than vh: vh ignores mobile browser chrome and would
+          still clip the footer on a phone. */}
+      <div className="relative flex w-full max-w-md max-h-[90dvh] flex-col rounded-2xl bg-[var(--split-bg-primary)] shadow-2xl">
+        <div className="shrink-0 p-6 pb-4">
           <h2 id="add-bucket-title" className="text-base font-semibold text-[var(--split-text-primary)]">
             Add bucket
           </h2>
@@ -199,7 +237,10 @@ export function AddBucketModal({ onClose }: Props) {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {/* min-h-0 is load-bearing: without it the flex child refuses to shrink
+            below its content height and the body never scrolls. */}
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-2">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-[var(--split-text-secondary)]" htmlFor="bucket-name">
               Name
@@ -323,11 +364,17 @@ export function AddBucketModal({ onClose }: Props) {
             <IconPicker value={icon} onChange={setIcon} />
           </div>
 
-          {error && (
-            <p className="text-sm text-[var(--split-text-danger)]" role="alert">{error}</p>
-          )}
+          </div>
 
-          <div className="flex gap-3 pt-1">
+          {/* Pinned: the error sits here rather than in the scroll area so a
+              failure can never be scrolled out of view, which is how the last one
+              went unnoticed. */}
+          <div className="shrink-0 space-y-3 border-t border-[var(--split-border)] p-6 pt-4">
+            {error && (
+              <p className="text-sm text-[var(--split-text-danger)]" role="alert">{error}</p>
+            )}
+
+            <div className="flex gap-3">
             <button
               type="button"
               onClick={onClose}
@@ -349,9 +396,28 @@ export function AddBucketModal({ onClose }: Props) {
             >
               {pending ? (status ?? 'Adding…') : 'Add bucket'}
             </button>
+            </div>
           </div>
         </form>
       </div>
+
+      {/* neededBps is in basis points, not percent: pctToBPS runs first, or a 15%
+          bucket would ask to free 15 bps (0.15%) and the reduction would be
+          nonsense. */}
+      {reduceOpen && (
+        <ReduceAllocationModal
+          buckets={existingBuckets}
+          neededBps={bpsToFree(currentTotalBps, pctToBPS(parseFloat(pctStr) || 0))}
+          onCancel={() => setReduceOpen(false)}
+          onReduced={async () => {
+            // Re-read from chain so the ceiling check sees the new total; the user
+            // then presses Add themselves, as a second deliberate action.
+            await loadBuckets()
+            void queryClient.invalidateQueries({ queryKey: ['buckets', address] })
+            setReduceOpen(false)
+          }}
+        />
+      )}
     </div>
   )
 }
