@@ -27,9 +27,9 @@
 .dark {
   --nav-active-glow: #2EFFA8;
   --nav-icon-shadow: drop-shadow(0 0 10px rgba(46,255,168,0.35));
-  --bg:          #0B0B0F;
-  --bg-2:        #15151C;
-  --bg-3:        #1F1F28;
+  --bg:          #0D0D0D;
+  --bg-2:        #161616;
+  --bg-3:        #202020;
   --text:        #F5F5F7;
   --text-2:      #A1A1AA;
   --text-3:      #52525B;
