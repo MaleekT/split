@@ -27,7 +27,7 @@ import { WithdrawModal } from '@/components/withdraw-modal'
 import { ScheduleModal } from '@/components/schedule-modal'
 import { EditBucketModal } from '@/components/edit-bucket-modal'
 import { GoalModal } from '@/components/goal-modal'
-import { Eye, EyeOff, Copy, Download, Plus } from 'lucide-react'
+import { AlertTriangle, Eye, EyeOff, Copy, Download, Plus, X } from 'lucide-react'
 
 const TX_TIMEOUT_MS = 30_000
 
@@ -114,6 +114,9 @@ export default function DashboardPage() {
   const [depositError, setDepositError] = useState<string | null>(null)
   const [pendingTxHash, setPendingTxHash] = useState<`0x${string}` | null>(null)
   const [modal, setModal]               = useState<ModalState>(null)
+  const [pendingDelete, setPendingDelete] = useState<SplitBucket | null>(null)
+  const [deleting, setDeleting] = useState<bigint | null>(null)
+  const [deleteNotice, setDeleteNotice] = useState<string | null>(null)
   const [hideBalances, setHideBalances] = useState(false)
   const [addOpen, setAddOpen]           = useState(false)
 
@@ -212,6 +215,66 @@ export default function DashboardPage() {
       // Always reset — the button must never stay stuck on a busy label.
       setDepositStep('idle')
       setPendingTxHash(null)
+    }
+  }
+
+  function requestDelete(bucket: SplitBucket) {
+    if (bucket.balance > 0n) {
+      setDeleteNotice(`Withdraw the remaining ${formatUsdc(bucket.balance)} USDC from “${bucket.name}” before deleting it.`)
+      return
+    }
+    setDeleteNotice(null)
+    setPendingDelete(bucket)
+  }
+
+  async function confirmDelete(bucket: SplitBucket) {
+    setPendingDelete(null)
+    setDeleting(bucket.id)
+    setDeleteNotice(null)
+
+    try {
+      const latestBuckets = await publicClient.readContract({
+        address: contractAddress,
+        abi: splitAbi,
+        functionName: 'getBuckets',
+        args: [address!],
+      }) as readonly SplitBucket[]
+      const latestBucket = latestBuckets.find((candidate) => candidate.id === bucket.id)
+
+      if (!latestBucket) {
+        setDeleteNotice('This bucket no longer exists. Refreshing your dashboard now.')
+        await refetch()
+        return
+      }
+      if (latestBucket.balance > 0n) {
+        setDeleteNotice(`Withdraw the remaining ${formatUsdc(latestBucket.balance)} USDC from “${latestBucket.name}” before deleting it.`)
+        await refetch()
+        return
+      }
+      if (chainId !== arcTestnet.id) {
+        await switchChainAsync({ chainId: arcTestnet.id })
+      }
+
+      const hash = await writeContractAsync({
+        address: contractAddress,
+        abi: splitAbi,
+        functionName: 'deleteBucket',
+        args: [bucket.id],
+        chainId: arcTestnet.id,
+      })
+      await waitForReceiptCapped(hash)
+      await Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: ['buckets', address] }),
+        queryClient.invalidateQueries({ queryKey: ['activity', address] }),
+        refetch(),
+      ])
+    } catch (err) {
+      const message = err instanceof Error && err.message.startsWith('Confirmation is taking longer')
+        ? err.message
+        : parseSplitError(err)
+      setDeleteNotice(message)
+    } finally {
+      setDeleting(null)
     }
   }
 
@@ -325,8 +388,8 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => setAddOpen(true)}
-                className="inline-flex items-center gap-1.5 transition-colors hover:bg-[var(--bg-3)]"
-                style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 12, color: 'var(--text)', border: '0.5px solid var(--border)', borderRadius: 9, padding: '6px 12px' }}
+                className="inline-flex items-center gap-1.5 transition-colors hover:bg-[var(--accent-bg-hover)]"
+                style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 12, color: 'var(--accent)', background: 'var(--accent-bg)', border: '1px solid var(--accent-border)', borderRadius: 9, padding: '7px 12px' }}
               >
                 <Plus size={14} /> New Bucket
               </button>
@@ -356,26 +419,50 @@ export default function DashboardPage() {
                     (g) => g.walletAddress.toLowerCase() === b.destination.toLowerCase(),
                   )
                   return (
-                    <BucketCard
-                      key={String(b.id)}
-                      bucket={b}
-                      goal={goals?.[String(b.id)]}
-                      isGenerated={!!gen}
-                      isPrimary={b.destination.toLowerCase() === address.toLowerCase()}
-                      onSendFromWallet={gen ? () => setSendWallet({
-                        bucketName: b.name,
-                        derivationIndex: gen.derivationIndex,
-                        walletAddress: b.destination,
-                      }) : undefined}
-                      routedTotal={raw ? BigInt(raw) : 0n}
-                      iconSlug={bucketIcons?.[String(b.id)]}
-                      colorIndex={index}
-                      onEdit={() => setModal({ kind: 'edit', bucket: b })}
-                      onWithdraw={() => setModal({ kind: 'withdraw', bucket: b })}
-                      onSchedule={() => setModal({ kind: 'schedule', bucket: b })}
-                      onSetGoal={() => setModal({ kind: 'goal', bucket: b })}
-                      onDelete={() => { /* delete handled in /app/settings */ }}
-                    />
+                    <div key={String(b.id)} className="relative">
+                      {deleting === b.id && (
+                        <div className="bucket-delete-overlay" role="status" aria-live="polite">
+                          <span>Deleting bucket…</span>
+                        </div>
+                      )}
+
+                      {pendingDelete?.id === b.id && (
+                        <div className="bucket-delete-overlay" role="dialog" aria-modal="true" aria-labelledby={`delete-bucket-${String(b.id)}`}>
+                          <div className="bucket-delete-dialog">
+                            <p id={`delete-bucket-${String(b.id)}`} className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                              Delete “{b.name}”?
+                            </p>
+                            <p style={{ color: 'var(--text-2)', fontSize: 12, lineHeight: 1.5 }}>
+                              This removes the bucket and its rules. This action cannot be undone.
+                            </p>
+                            <div className="flex justify-end gap-2">
+                              <button type="button" className="bucket-dialog-cancel" onClick={() => setPendingDelete(null)}>Cancel</button>
+                              <button type="button" className="bucket-dialog-delete" onClick={() => void confirmDelete(b)}>Delete</button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <BucketCard
+                        bucket={b}
+                        goal={goals?.[String(b.id)]}
+                        isGenerated={!!gen}
+                        isPrimary={b.destination.toLowerCase() === address.toLowerCase()}
+                        onSendFromWallet={gen ? () => setSendWallet({
+                          bucketName: b.name,
+                          derivationIndex: gen.derivationIndex,
+                          walletAddress: b.destination,
+                        }) : undefined}
+                        routedTotal={raw ? BigInt(raw) : 0n}
+                        iconSlug={bucketIcons?.[String(b.id)]}
+                        colorIndex={index}
+                        onEdit={() => setModal({ kind: 'edit', bucket: b })}
+                        onWithdraw={() => setModal({ kind: 'withdraw', bucket: b })}
+                        onSchedule={() => setModal({ kind: 'schedule', bucket: b })}
+                        onSetGoal={() => setModal({ kind: 'goal', bucket: b })}
+                        onDelete={() => requestDelete(b)}
+                      />
+                    </div>
                   )
                 })}
               </div>
@@ -394,6 +481,16 @@ export default function DashboardPage() {
       </div>
 
       {addOpen && <AddBucketModal onClose={() => setAddOpen(false)} />}
+
+      {deleteNotice && (
+        <div className="bucket-delete-toast" role="alert">
+          <AlertTriangle size={18} aria-hidden="true" />
+          <p>{deleteNotice}</p>
+          <button type="button" onClick={() => setDeleteNotice(null)} aria-label="Dismiss notification">
+            <X size={17} />
+          </button>
+        </div>
+      )}
 
       {sendWallet && (
         <BucketWalletSendModal

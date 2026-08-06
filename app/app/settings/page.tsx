@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { getSplitContract, splitAbi, ZERO_ADDRESS, type SplitBucket } from '@/lib/contracts'
 import { publicClient } from '@/lib/arc'
 import { parseSplitError } from '@/lib/errors'
+import { formatUsdc } from '@/lib/format'
 import { useRoutedTotals } from '@/hooks/use-routed-totals'
 import { useBucketIcons } from '@/hooks/use-bucket-icons'
 import { BucketCard } from '@/components/bucket-card'
@@ -194,7 +195,7 @@ export default function SettingsPage() {
                     Delete this bucket?
                   </p>
                   <p className="text-xs text-[var(--split-text-secondary)] text-center">
-                    Any remaining balance can still be withdrawn.
+                    This removes the bucket and its rules. This action cannot be undone.
                   </p>
                   <div className="flex gap-2">
                     <button
@@ -226,7 +227,14 @@ export default function SettingsPage() {
                 onWithdraw={() => setModal({ kind: 'withdraw', bucket: b })}
                 onSchedule={() => setModal({ kind: 'schedule', bucket: b })}
                 onSetGoal={() => setModal({ kind: 'goal', bucket: b })}
-                onDelete={() => setPendingDelete(b)}
+                onDelete={() => {
+                  if (b.balance > 0n) {
+                    setDeleteError(`Withdraw the remaining ${formatUsdc(b.balance)} USDC from “${b.name}” before deleting it.`)
+                    return
+                  }
+                  setDeleteError(null)
+                  setPendingDelete(b)
+                }}
               />
             </div>
             )

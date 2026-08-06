@@ -106,7 +106,14 @@ export function ActivityFeed({ address, compact = false }: Props) {
         {header}
         <div className="p-4 space-y-3">
           {(['a', 'b', 'c', 'd'] as const).map((k, i) => (
-            <div key={k} className="h-12 rounded-lg" style={{ background: 'var(--bg-3)', opacity: 1 - i * 0.18 }} />
+            <div key={k} className="flex items-center gap-3" style={{ opacity: 1 - i * 0.16 }}>
+              <span className="h-8 w-8 shrink-0 rounded-full animate-pulse" style={{ background: 'var(--bg-3)' }} />
+              <span className="min-w-0 flex-1 space-y-2">
+                <span className="block h-2.5 w-2/3 rounded animate-pulse" style={{ background: 'var(--bg-3)' }} />
+                <span className="block h-2 w-2/5 rounded animate-pulse" style={{ background: 'var(--bg-3)' }} />
+              </span>
+              <span className="h-2.5 w-14 rounded animate-pulse" style={{ background: 'var(--bg-3)' }} />
+            </div>
           ))}
         </div>
       </div>

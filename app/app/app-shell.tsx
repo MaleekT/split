@@ -35,32 +35,12 @@ function NavItem({ href, label, icon: Icon, exact, onNavigate }: {
       onClick={onNavigate}
       className={active ? 'sp-nav-active' : 'sp-nav-inactive'}
     >
-      {active && <>
-        <span aria-hidden="true" style={{
-          position: 'absolute',
-          left: 0,
-          top: '50%',
-          transform: 'translateY(-50%)',
-          width: 4,
-          height: '74%',
-          borderRadius: 999,
-          background: 'var(--nav-active-glow)',
-          boxShadow: '0 0 10px rgba(46,255,168,0.6), 0 0 25px rgba(46,255,168,0.4), 0 0 40px rgba(46,255,168,0.2)',
-        }} />
-        <span aria-hidden="true" style={{
-          position: 'absolute',
-          inset: 0,
-          borderRadius: 18,
-          background: 'radial-gradient(circle at 25% center, rgba(46,255,168,0.12), transparent 60%)',
-          pointerEvents: 'none',
-        }} />
-      </>}
       <Icon
-        size={active ? 20 : 18}
+        size={18}
         className="sp-nav-icon"
-        style={{ flexShrink: 0, position: 'relative', zIndex: 1 }}
+        style={{ flexShrink: 0 }}
       />
-      <span style={{ position: 'relative', zIndex: 1 }}>{label}</span>
+      <span>{label}</span>
     </Link>
   )
 }

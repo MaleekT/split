@@ -2,8 +2,6 @@
 
 /* ── Design tokens ─────────────────────────────────────────────────────────── */
 :root {
-  --nav-active-glow: #1AB87A;
-  --nav-icon-shadow: drop-shadow(0 0 10px rgba(26,184,122,0.35));
   --bg:          #F4F2EE;
   --bg-2:        #FFFFFF;
   --bg-3:        #ECEAE6;
@@ -25,8 +23,6 @@
 }
 
 .dark {
-  --nav-active-glow: #2EFFA8;
-  --nav-icon-shadow: drop-shadow(0 0 10px rgba(46,255,168,0.35));
   --bg:          #0D0D0D;
   --bg-2:        #161616;
   --bg-3:        #202020;
@@ -125,24 +121,19 @@ body {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 48px;
-  padding: 0 16px 0 20px;
-  border-radius: 18px;
+  gap: 12px;
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 10px;
   font-family: var(--font-sans);
   font-weight: 600;
   font-size: 15px;
   letter-spacing: -0.01em;
-  color: var(--nav-active-glow);
-  background: linear-gradient(90deg, rgba(8,25,20,0.95) 0%, rgba(10,45,34,0.90) 35%, rgba(14,65,48,0.85) 100%);
-  border: 1px solid rgba(46,255,168,0.08);
-  box-shadow:
-    0 0 20px rgba(44,255,170,0.10),
-    0 0 40px rgba(44,255,170,0.08),
-    0 0 80px rgba(44,255,170,0.04),
-    inset 0 1px 0 rgba(255,255,255,0.06);
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
   text-decoration: none;
-  transition: box-shadow 250ms ease-out, filter 250ms ease-out, transform 150ms ease-out;
+  transition: background 160ms ease-out, border-color 160ms ease-out, transform 120ms ease-out;
 }
 
 .sp-nav-active:active {
@@ -151,9 +142,7 @@ body {
 
 /* Icon glow — active */
 .sp-nav-active .sp-nav-icon {
-  color: var(--nav-active-glow);
-  filter: var(--nav-icon-shadow);
-  transition: transform 250ms ease-out;
+  color: var(--accent);
 }
 
 /* Icon color — inactive (explicit, avoids inheritance surprises) */
@@ -165,7 +154,7 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 38px;
+  height: 42px;
   padding: 0 12px;
   border-radius: 10px;
   font-family: var(--font-sans);
@@ -179,21 +168,19 @@ body {
 /* Hover effects gated to true pointer devices — touch devices skip these */
 @media (hover: hover) {
   .sp-nav-active:hover {
-    box-shadow:
-      0 0 24px rgba(44,255,170,0.14),
-      0 0 50px rgba(44,255,170,0.10),
-      0 0 90px rgba(44,255,170,0.06),
-      inset 0 1px 0 rgba(255,255,255,0.06);
-    filter: brightness(1.05);
-  }
-
-  .sp-nav-active:hover .sp-nav-icon {
-    transform: translateX(1px);
+    background: var(--accent-bg-hover);
+    border-color: var(--accent);
   }
 
   .sp-nav-inactive:hover {
     background: var(--bg-3);
   }
+}
+
+.sp-nav-active:focus-visible,
+.sp-nav-inactive:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* Tabular figures for monospace numeric content (USDC amounts, addresses, percentages) */
@@ -230,6 +217,257 @@ code {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
+}
+
+/* Bucket cards use one neutral, token-driven surface in both themes. Category color
+   is deliberately limited to the icon and progress indicators. */
+.bucket-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 352px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-2);
+  color: var(--text);
+  transition: border-color 160ms ease-out, background 160ms ease-out, transform 120ms ease-out;
+}
+
+@media (hover: hover) {
+  .bucket-card:hover {
+    border-color: color-mix(in srgb, var(--text-3) 45%, var(--border));
+    background: color-mix(in srgb, var(--bg-2) 94%, var(--bg-3));
+  }
+}
+
+.bucket-card-icon {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  color: var(--bucket-accent);
+  background: var(--bucket-accent-soft);
+}
+
+.bucket-card-label {
+  color: var(--text-2);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.bucket-card-balance { margin-top: 20px; }
+.bucket-card-allocation { margin-top: 16px; }
+
+.bucket-allocation-track,
+.bucket-goal-track {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-3);
+}
+
+.bucket-allocation-track { margin-top: 8px; }
+.bucket-goal-track { margin-top: 6px; }
+
+.bucket-allocation-track > span,
+.bucket-goal-track > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--bucket-accent);
+  transform-origin: left center;
+  transition: transform 300ms ease-out;
+}
+
+.bucket-card-goal-slot {
+  min-height: 40px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.bucket-card-footer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.bucket-card-action,
+.bucket-menu-summary {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 500;
+  transition: background 140ms ease-out, border-color 140ms ease-out, color 140ms ease-out;
+}
+
+.bucket-card-action { flex: 1; padding: 0 12px; }
+.bucket-card-action:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.bucket-menu-summary {
+  width: 40px;
+  list-style: none;
+}
+
+.bucket-menu-summary::-webkit-details-marker { display: none; }
+
+@media (hover: hover) {
+  .bucket-card-action:not(:disabled):hover,
+  .bucket-menu-summary:hover {
+    color: var(--text);
+    border-color: color-mix(in srgb, var(--text-3) 45%, var(--border));
+    background: var(--bg-3);
+  }
+}
+
+.bucket-card-action:focus-visible,
+.bucket-menu-summary:focus-visible,
+.bucket-menu-popover button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.bucket-card-menu { position: relative; flex: none; }
+
+.bucket-menu-popover {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  width: 164px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-2);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+}
+
+.bucket-menu-popover button {
+  width: 100%;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.bucket-menu-popover button:hover { background: var(--bg-3); color: var(--text); }
+.bucket-menu-popover button.is-danger { color: var(--danger); }
+.bucket-menu-popover button.is-danger:hover { background: var(--danger-bg); }
+.bucket-menu-divider { display: block; height: 1px; margin: 5px 4px; background: var(--border); }
+
+.bucket-delete-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-2) 96%, transparent);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.bucket-delete-dialog {
+  width: 100%;
+  max-width: 270px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--bg-2);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+}
+
+.bucket-dialog-cancel,
+.bucket-dialog-delete {
+  min-height: 38px;
+  padding: 0 13px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.bucket-dialog-cancel {
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  background: transparent;
+}
+
+.bucket-dialog-delete { color: white; background: var(--danger); }
+
+.bucket-delete-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 100;
+  width: min(390px, calc(100vw - 32px));
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 11px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--warning) 32%, var(--border));
+  border-radius: 11px;
+  background: var(--bg-2);
+  color: var(--warning);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.2);
+}
+
+.bucket-delete-toast p {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.bucket-delete-toast button {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: -6px -6px 0 0;
+  border-radius: 7px;
+  color: var(--text-2);
+}
+
+.bucket-delete-toast button:hover { background: var(--bg-3); color: var(--text); }
+
+@media (max-width: 640px) {
+  .bucket-delete-toast { right: 16px; bottom: 16px; }
+}
+
+@media (max-width: 420px) {
+  .bucket-card { height: 352px; padding: 16px; }
+  .bucket-card-action { padding-inline: 8px; }
 }
 
 @media (max-width: 640px) {

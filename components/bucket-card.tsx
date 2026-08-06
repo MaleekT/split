@@ -1,5 +1,6 @@
 'use client'
 
+import { useRef } from 'react'
 import type { SplitBucket } from '@/lib/contracts'
 import { ZERO_ADDRESS } from '@/lib/contracts'
 import { UsdcAmount } from './usdc-amount'
@@ -7,229 +8,213 @@ import { Badge } from './badge'
 import { bucketIconFor } from './bucket-icon'
 import { shortAddress, formatUsdc } from '@/lib/format'
 import { bpsToPCT } from '@/lib/bps'
-import { SquarePen, ArrowDownToLine, CalendarClock, Target, Trash2, Send } from 'lucide-react'
+import {
+  ArrowDownToLine,
+  CalendarClock,
+  MoreHorizontal,
+  Send,
+  SquarePen,
+  Target,
+  Trash2,
+} from 'lucide-react'
 
 const BUCKET_PALETTE = [
   { r: 29,  g: 158, b: 117 },
-  { r: 96,  g: 165, b: 250 },
-  { r: 168, g: 85,  b: 247 },
-  { r: 251, g: 146, b: 60  },
-  { r: 244, g: 114, b: 182 },
-  { r: 34,  g: 211, b: 238 },
-  { r: 251, g: 191, b: 36  },
-  { r: 248, g: 113, b: 113 },
+  { r: 59,  g: 130, b: 246 },
+  { r: 147, g: 51,  b: 234 },
+  { r: 234, g: 88,  b: 12  },
+  { r: 219, g: 39,  b: 119 },
+  { r: 8,   g: 145, b: 178 },
+  { r: 202, g: 138, b: 4   },
+  { r: 220, g: 38,  b: 38  },
 ] as const
 
 interface Props {
-  bucket:       SplitBucket
-  goal?:        bigint
+  bucket: SplitBucket
+  goal?: bigint
   routedTotal?: bigint
-  iconSlug?:    string
-  colorIndex:   number
-  onEdit:       () => void
-  onWithdraw:   () => void
-  /** True when this bucket's destination is a wallet Split derived and can spend from. */
+  iconSlug?: string
+  colorIndex: number
+  onEdit: () => void
+  onWithdraw: () => void
   isGenerated?: boolean
-  /** True when this bucket sends to the wallet currently connected to Split. */
   isPrimary?: boolean
-  /** Present only for generated buckets: opens the local-signing send dialog. */
   onSendFromWallet?: () => void
-  onSchedule:   () => void
-  onSetGoal:    () => void
-  onDelete:     () => void
+  onSchedule: () => void
+  onSetGoal: () => void
+  onDelete: () => void
 }
 
-function Ring({ pct, color, Icon }: { pct: number; color: string; Icon: React.ComponentType<{ size?: number; color?: string }> }) {
-  const r = 38
-  const circumference = 2 * Math.PI * r
-  const dash = Math.min(pct, 100) / 100 * circumference
+function ActionButton({
+  icon,
+  label,
+  onClick,
+  disabled = false,
+}: {
+  icon: React.ReactNode
+  label: string
+  onClick: () => void
+  disabled?: boolean
+}) {
   return (
-    <div className="relative shrink-0" style={{ width: 96, height: 96 }}>
-      <svg width={96} height={96} viewBox="0 0 96 96" style={{ transform: 'rotate(-90deg)' }} aria-hidden="true">
-        <circle cx="48" cy="48" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="7" />
-        <circle
-          cx="48" cy="48" r={r} fill="none" stroke={color} strokeWidth="7" strokeLinecap="round"
-          strokeDasharray={`${dash} ${circumference}`} style={{ transition: 'stroke-dasharray 0.5s ease' }}
-        />
-      </svg>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <Icon size={28} color={color} />
-      </div>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="bucket-card-action"
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
   )
 }
 
-const actionBtn = 'flex flex-col items-center gap-1 flex-1 rounded-lg py-1.5 transition-colors hover:bg-[rgba(255,255,255,0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]'
-const actionLabel = { fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 11 } as const
-
-export function BucketCard({ bucket, goal, routedTotal, iconSlug, colorIndex, onEdit, onWithdraw, onSchedule, onSetGoal, onDelete, isGenerated = false, isPrimary = false, onSendFromWallet }: Props) {
-  const isHold      = bucket.destination === ZERO_ADDRESS
-  const hasGoal     = goal !== undefined && goal > 0n
+export function BucketCard({
+  bucket,
+  goal,
+  routedTotal,
+  iconSlug,
+  colorIndex,
+  onEdit,
+  onWithdraw,
+  onSchedule,
+  onSetGoal,
+  onDelete,
+  isGenerated = false,
+  isPrimary = false,
+  onSendFromWallet,
+}: Props) {
+  const menuRef = useRef<HTMLDetailsElement>(null)
+  const isHold = bucket.destination === ZERO_ADDRESS
+  const hasGoal = goal !== undefined && goal > 0n
   const canWithdraw = bucket.balance > 0n
-  const pct         = bpsToPCT(bucket.bps)
-  const amount      = isHold ? bucket.balance : (routedTotal ?? 0n)
-  const Icon        = bucketIconFor(iconSlug)
+  const pct = bpsToPCT(bucket.bps)
+  const amount = isHold ? bucket.balance : (routedTotal ?? 0n)
+  const Icon = bucketIconFor(iconSlug)
+  const accent = BUCKET_PALETTE[colorIndex % BUCKET_PALETTE.length]!
+  const accentColor = `rgb(${accent.r}, ${accent.g}, ${accent.b})`
+  const accentSoft = `rgba(${accent.r}, ${accent.g}, ${accent.b}, 0.12)`
 
-  const { r, g, b } = BUCKET_PALETTE[colorIndex % BUCKET_PALETTE.length]!
-  const glow      = `${r},${g},${b}`
-  const ringColor = `rgb(${r},${g},${b})`
-
-  const progressRaw = hasGoal ? Math.min(100, (Number(amount) / Number(goal ?? 1n)) * 100) : 0
-  const barWidth    = progressRaw > 0 ? Math.max(1, progressRaw) : 0
+  const progressRaw = hasGoal
+    ? Math.min(100, (Number(amount) / Number(goal ?? 1n)) * 100)
+    : 0
   const progressPct = progressRaw > 0 && progressRaw < 1
     ? progressRaw.toFixed(1)
     : String(Math.round(progressRaw))
 
+  function runMenuAction(action: () => void) {
+    if (menuRef.current) menuRef.current.open = false
+    action()
+  }
+
   return (
     <article
-      className="relative flex flex-col transition-all"
+      className="bucket-card"
       style={{
-        background: `
-          radial-gradient(circle at 50% 40%, rgba(18,30,60,0.55) 0%, rgba(10,13,24,0.9) 55%, rgba(8,10,18,1) 100%),
-          #0A0D18
-        `,
-        backdropFilter: 'blur(24px)',
-        borderRadius: 16,
-        padding: 20,
-        overflow: 'hidden',
-        border: '1px solid rgba(255,255,255,0.08)',
-        boxShadow: `
-          0 0 0 1px rgba(${glow},0.10),
-          inset 0 1px 0 rgba(255,255,255,0.05),
-          0 0 40px rgba(${glow},0.06)
-        `,
-      }}
+        '--bucket-accent': accentColor,
+        '--bucket-accent-soft': accentSoft,
+      } as React.CSSProperties}
     >
-
-      {/* ── Cloud 1: top-left blob, gradient bright on its upper-left edge only ── */}
-      <div aria-hidden="true" style={{
-        position: 'absolute', top: '-10%', left: '-5%',
-        width: '52%', height: '48%', pointerEvents: 'none',
-        borderRadius: '50% 60% 40% 55% / 55% 45% 65% 40%',
-        background: `linear-gradient(145deg, rgba(${glow},0.58) 0%, rgba(${glow},0.24) 38%, transparent 62%)`,
-        filter: 'blur(20px)',
-      }} />
-
-      {/* ── Cloud 2: right blob, gradient bright on its upper-right edge only ── */}
-      <div aria-hidden="true" style={{
-        position: 'absolute', top: '18%', right: '-8%',
-        width: '46%', height: '44%', pointerEvents: 'none',
-        borderRadius: '60% 45% 55% 40% / 40% 58% 42% 60%',
-        background: `linear-gradient(-115deg, rgba(${glow},0.52) 0%, rgba(${glow},0.20) 38%, transparent 62%)`,
-        filter: 'blur(22px)',
-      }} />
-
-      {/* ── Cloud 3: bottom blob, gradient bright on its bottom edge only ── */}
-      <div aria-hidden="true" style={{
-        position: 'absolute', bottom: '-14%', left: '20%',
-        width: '54%', height: '42%', pointerEvents: 'none',
-        borderRadius: '55% 45% 30% 30% / 50% 50% 22% 22%',
-        background: `linear-gradient(195deg, transparent 0%, rgba(${glow},0.18) 42%, rgba(${glow},0.50) 82%)`,
-        filter: 'blur(22px)',
-      }} />
-
-      {/* ── Floating bubble particles ── */}
-      <span aria-hidden="true" style={{ position: 'absolute', top: '16%',   right: '11%', width: 18, height: 18, borderRadius: 999, pointerEvents: 'none', background: `rgba(${glow},0.05)`, border: `1px solid rgba(${glow},0.28)`, boxShadow: `0 0 14px rgba(${glow},0.14)` }} />
-      <span aria-hidden="true" style={{ position: 'absolute', top: '53%',   right: '7%',  width: 12, height: 12, borderRadius: 999, pointerEvents: 'none', background: `rgba(${glow},0.04)`, border: `1px solid rgba(${glow},0.22)`, boxShadow: `0 0 10px rgba(${glow},0.12)` }} />
-      <span aria-hidden="true" style={{ position: 'absolute', top: '32%',   right: '23%', width: 8,  height: 8,  borderRadius: 999, pointerEvents: 'none', background: `rgba(${glow},0.04)`, border: `1px solid rgba(${glow},0.20)`, boxShadow: `0 0 8px rgba(${glow},0.10)`  }} />
-      <span aria-hidden="true" style={{ position: 'absolute', bottom: '28%', right: '17%', width: 6,  height: 6,  borderRadius: 999, pointerEvents: 'none', background: `rgba(${glow},0.05)`, border: `1px solid rgba(${glow},0.25)`, boxShadow: `0 0 8px rgba(${glow},0.12)`  }} />
-      <span aria-hidden="true" style={{ position: 'absolute', top: '68%',   right: '38%', width: 4,  height: 4,  borderRadius: 999, pointerEvents: 'none', background: `rgba(${glow},0.06)`, border: `1px solid rgba(${glow},0.30)`, boxShadow: `0 0 6px rgba(${glow},0.15)`  }} />
-      <span aria-hidden="true" style={{ position: 'absolute', top: '80%',   right: '54%', width: 4,  height: 4,  borderRadius: 999, pointerEvents: 'none', background: `rgba(${glow},0.05)`, border: `1px solid rgba(${glow},0.22)`, boxShadow: `0 0 6px rgba(${glow},0.10)`  }} />
-      <span aria-hidden="true" style={{ position: 'absolute', bottom: '20%', left: '14%',  width: 6,  height: 6,  borderRadius: 999, pointerEvents: 'none', background: `rgba(${glow},0.04)`, border: `1px solid rgba(${glow},0.18)`, boxShadow: `0 0 8px rgba(${glow},0.10)`  }} />
-      <span aria-hidden="true" style={{ position: 'absolute', top: '44%',   left: '7%',   width: 8,  height: 8,  borderRadius: 999, pointerEvents: 'none', background: `rgba(${glow},0.04)`, border: `1px solid rgba(${glow},0.18)`, boxShadow: `0 0 10px rgba(${glow},0.10)` }} />
-
-      {/* ── Content ── */}
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column' }}>
-
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="min-w-0 truncate" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: 'rgba(255,255,255,0.92)' }}>
-            {bucket.name}
-          </h3>
-          <Badge variant={isHold ? 'holds' : 'auto-sends'} />
-        </div>
-
-        <p className={isHold ? '' : 'font-mono'} style={{ fontSize: 11, color: 'rgba(255,255,255,0.30)', marginTop: 2, fontFamily: isHold ? "'Inter', sans-serif" : undefined }}>
-          {isHold ? 'Holds in contract' : shortAddress(bucket.destination)}
-          {!isHold && isGenerated && (
-            <span style={{ fontFamily: "'Inter', sans-serif", marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'rgba(29,158,117,0.9)' }}>
-              · SPLIT WALLET
-            </span>
-          )}
-          {!isHold && !isGenerated && isPrimary && (
-            <span style={{ fontFamily: "'Inter', sans-serif", marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--warning, #FBBF24)' }}>
-              · PRIMARY WALLET
-            </span>
-          )}
-        </p>
-
-        <div className="flex items-center gap-4" style={{ marginTop: 14 }}>
-          <Ring pct={pct} color={ringColor} Icon={Icon} />
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="bucket-card-icon" aria-hidden="true">
+            <Icon size={20} />
+          </span>
           <div className="min-w-0">
-            <p style={{ fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.30)' }}>
-              Allocation
+            <h3 className="truncate text-sm font-semibold" style={{ color: 'var(--text)' }}>
+              {bucket.name}
+            </h3>
+            <p
+              className={isHold ? '' : 'font-mono'}
+              style={{ color: 'var(--text-2)', fontSize: 11, marginTop: 1, fontFamily: isHold ? "'Inter', sans-serif" : undefined }}
+            >
+              {isHold ? 'Holds in contract' : shortAddress(bucket.destination)}
             </p>
-            <p className="font-mono tabular-nums" style={{ fontWeight: 700, fontSize: 22, color: 'rgba(255,255,255,0.92)', lineHeight: 1.1 }}>
+          </div>
+        </div>
+        <Badge variant={isHold ? 'holds' : 'auto-sends'} />
+      </div>
+
+      <div className="bucket-card-balance">
+        <p className="bucket-card-label">Balance</p>
+        <UsdcAmount value={amount} className="text-[16px] font-semibold" />
+        <p className="font-mono" style={{ color: 'var(--text-3)', fontSize: 11, marginTop: 2 }}>
+          ≈ ${formatUsdc(amount)} USD
+        </p>
+      </div>
+
+      <div className="bucket-card-allocation">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="bucket-card-label">Allocation</p>
+            <p className="font-mono tabular-nums" style={{ color: 'var(--text)', fontSize: 22, fontWeight: 700, lineHeight: 1.1 }}>
               {pct % 1 === 0 ? pct : pct.toFixed(2)}%
             </p>
-            <p style={{ fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.30)', marginTop: 8 }}>
-              Amount
-            </p>
-            <UsdcAmount value={amount} className="text-[16px] font-semibold" />
-            <p className="font-mono" style={{ fontSize: 11, color: 'rgba(255,255,255,0.30)' }}>≈ ${formatUsdc(amount)} USD</p>
           </div>
+          <p className="truncate text-right" style={{ color: 'var(--text-2)', fontSize: 11 }}>
+            {!isHold && isGenerated ? 'Split wallet' : !isHold && isPrimary ? 'Primary wallet' : isHold ? 'Available to withdraw' : 'Auto-routed'}
+          </p>
         </div>
+        <div className="bucket-allocation-track" aria-hidden="true">
+          <span style={{ transform: `scaleX(${Math.min(100, pct) / 100})` }} />
+        </div>
+      </div>
 
-        {hasGoal && (
-          <div style={{ marginTop: 14 }}>
-            <div style={{ height: 6, background: 'rgba(255,255,255,0.08)', borderRadius: 999, overflow: 'hidden' }}>
-              <div
-                style={{ height: '100%', background: ringColor, borderRadius: 999, width: `${barWidth}%`, transition: 'width 0.4s ease', opacity: 0.75 }}
-                role="progressbar" aria-valuenow={Math.round(barWidth)} aria-valuemin={0} aria-valuemax={100} aria-label={`${progressPct}% of goal`}
+      <div className="bucket-card-goal-slot">
+        {hasGoal ? (
+          <>
+            <div className="flex items-center justify-between gap-3">
+              <p style={{ color: 'var(--text-2)', fontSize: 11 }}>Goal ${formatUsdc(goal)}</p>
+              <p className="font-mono" style={{ color: 'var(--text-2)', fontSize: 11 }}>{progressPct}%</p>
+            </div>
+            <div className="bucket-goal-track">
+              <span
+                style={{ transform: `scaleX(${progressRaw / 100})` }}
+                role="progressbar"
+                aria-valuenow={Math.round(progressRaw)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={`${progressPct}% of goal`}
               />
             </div>
-            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.30)', marginTop: 6 }}>
-              Goal: ${formatUsdc(goal)} · {progressPct}% there
-            </p>
-          </div>
+          </>
+        ) : (
+          <p style={{ color: 'var(--text-3)', fontSize: 11 }}>No savings goal set</p>
         )}
+      </div>
 
-        <div className="flex items-stretch" style={{ gap: 2, marginTop: 16, paddingTop: 14, borderTop: '0.5px solid rgba(255,255,255,0.08)' }}>
-          <button type="button" onClick={onEdit} className={actionBtn} style={{ color: 'rgba(255,255,255,0.45)' }}>
-            <SquarePen size={15} /><span style={actionLabel}>Edit</span>
-          </button>
-          <button
-            type="button" onClick={onWithdraw} disabled={!canWithdraw}
-            className={canWithdraw ? actionBtn : 'flex flex-col items-center gap-1 flex-1 rounded-lg py-1.5'}
-            style={{ color: canWithdraw ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.18)', cursor: canWithdraw ? 'pointer' : 'not-allowed' }}
-          >
-            <ArrowDownToLine size={15} /><span style={actionLabel}>Withdraw</span>
-          </button>
-          {isGenerated && onSendFromWallet && (
-            // Only for wallets Split derived: sends straight from the destination
-            // address with no wallet popup. Sits beside Withdraw rather than
-            // replacing it - Withdraw moves funds out of the Split contract, this
-            // moves funds already sitting in the bucket's own wallet.
-            <button type="button" onClick={onSendFromWallet} className={actionBtn} style={{ color: 'rgba(255,255,255,0.45)' }}>
-              <Send size={15} /><span style={actionLabel}>Send</span>
-            </button>
+      <div className="bucket-card-footer">
+        <div className="flex min-w-0 flex-1 gap-2">
+          <ActionButton icon={<SquarePen size={15} />} label="Edit" onClick={onEdit} />
+          {isGenerated && onSendFromWallet ? (
+            <ActionButton icon={<Send size={15} />} label="Send" onClick={onSendFromWallet} />
+          ) : (
+            <ActionButton
+              icon={<ArrowDownToLine size={15} />}
+              label="Withdraw"
+              onClick={onWithdraw}
+              disabled={!canWithdraw}
+            />
           )}
-          <button type="button" onClick={onSchedule} className={actionBtn} style={{ color: 'rgba(255,255,255,0.45)' }}>
-            <CalendarClock size={15} /><span style={actionLabel}>Schedule</span>
-          </button>
-          <button type="button" onClick={onSetGoal} className={actionBtn} style={{ color: hasGoal ? ringColor : 'rgba(255,255,255,0.45)' }}>
-            <Target size={15} /><span style={actionLabel}>Goal</span>
-          </button>
         </div>
 
-        <button
-          type="button" onClick={onDelete}
-          className="inline-flex items-center justify-center gap-1.5 rounded-lg transition-colors hover:bg-[rgba(239,68,68,0.08)]"
-          style={{ ...actionLabel, color: 'var(--danger)', marginTop: 6, padding: '6px 0' }}
-        >
-          <Trash2 size={12} />
-          Delete
-        </button>
-
+        <details ref={menuRef} className="bucket-card-menu">
+          <summary className="bucket-menu-summary" aria-label={`More actions for ${bucket.name}`}>
+            <MoreHorizontal size={18} />
+          </summary>
+          <div className="bucket-menu-popover">
+            <button type="button" onClick={() => runMenuAction(onSchedule)}>
+              <CalendarClock size={15} /> Schedule
+            </button>
+            <button type="button" onClick={() => runMenuAction(onSetGoal)}>
+              <Target size={15} /> {hasGoal ? 'Edit goal' : 'Set goal'}
+            </button>
+            <span className="bucket-menu-divider" />
+            <button type="button" className="is-danger" onClick={() => runMenuAction(onDelete)}>
+              <Trash2 size={15} /> Delete bucket
+            </button>
+          </div>
+        </details>
       </div>
     </article>
   )

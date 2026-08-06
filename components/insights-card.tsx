@@ -242,19 +242,25 @@ export function InsightsCard({ address, large = false }: Props) {
         </select>
       </div>
 
-      <div className="flex items-end justify-between gap-4">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, auto)', columnGap: '1.5rem', rowGap: '2px' }}>
-          <p style={LABEL_STYLE}>Total deposits</p>
-          <p style={LABEL_STYLE}>Auto-sent</p>
-          <p style={LABEL_STYLE}>Transactions</p>
-          <p className="font-mono tabular-nums" style={VALUE_STYLE}>{`$${stats.deposits.toFixed(2)}`}</p>
-          <p className="font-mono tabular-nums" style={VALUE_STYLE}>{`$${stats.autoSent.toFixed(2)}`}</p>
-          <p className="font-mono tabular-nums" style={VALUE_STYLE}>{String(stats.txCount)}</p>
-          <StatChange change={stats.depChange} />
-          <StatChange change={stats.autoChange} />
-          <StatChange change={stats.txChange} />
+      <div className="flex flex-col gap-5">
+        <div className="grid grid-cols-3 gap-4">
+          <div className="min-w-0">
+            <p style={LABEL_STYLE}>Total deposits</p>
+            <p className="font-mono tabular-nums" style={VALUE_STYLE}>{`$${stats.deposits.toFixed(2)}`}</p>
+            <StatChange change={stats.depChange} />
+          </div>
+          <div className="min-w-0">
+            <p style={LABEL_STYLE}>Auto-sent</p>
+            <p className="font-mono tabular-nums" style={VALUE_STYLE}>{`$${stats.autoSent.toFixed(2)}`}</p>
+            <StatChange change={stats.autoChange} />
+          </div>
+          <div className="min-w-0">
+            <p style={LABEL_STYLE}>Transactions</p>
+            <p className="font-mono tabular-nums" style={VALUE_STYLE}>{String(stats.txCount)}</p>
+            <StatChange change={stats.txChange} />
+          </div>
         </div>
-        {!large && <Sparkline points={stats.spark} />}
+        {!large && <div className="flex justify-end"><Sparkline points={stats.spark} /></div>}
       </div>
 
       {large && (
