@@ -83,7 +83,7 @@ const PAGE_CSS = `
   background:none; border:none; cursor:pointer; padding:0;
   font-family:inherit; transition:color 0.2s ease;
 }
-.sp-nav-btn:hover { color:var(--text); }
+@media (hover:hover) { .sp-nav-btn:hover { color:var(--text); } }
 /* Underline is scoped to the centre group so footer links (which reuse .sp-nav-btn) stay plain */
 .sp-nav-center .sp-nav-btn::after {
   content:''; position:absolute; left:0; right:0; bottom:-7px; height:1px;
@@ -91,7 +91,7 @@ const PAGE_CSS = `
   transform:scaleX(0); transform-origin:center;
   transition:transform 0.32s cubic-bezier(0.65,0,0.35,1);
 }
-.sp-nav-center .sp-nav-btn:hover::after,
+@media (hover:hover) { .sp-nav-center .sp-nav-btn:hover::after { transform:scaleX(1); } }
 .sp-nav-center .sp-nav-btn.is-active::after { transform:scaleX(1); }
 .sp-nav-center .sp-nav-btn.is-active { color:var(--text); }
 .sp-nav-right { flex:1; display:flex; align-items:center; justify-content:flex-end; gap:12px; }
@@ -102,7 +102,7 @@ const PAGE_CSS = `
   color:var(--text); cursor:pointer; font-family:inherit;
   transition:border-color 0.15s, color 0.15s;
 }
-.sp-btn-ghost:hover { border-color:var(--accent); color:var(--accent); }
+@media (hover:hover) { .sp-btn-ghost:hover { border-color:var(--accent); color:var(--accent); } }
 .sp-btn-cta {
   background:linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%);
   color:#fff; border:none; border-radius:9px;
@@ -111,7 +111,7 @@ const PAGE_CSS = `
   white-space:nowrap;
   transition:transform 0.25s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.25s ease;
 }
-.sp-btn-cta:hover { transform:translateY(-1.5px); box-shadow:0 8px 20px -6px rgba(29,158,117,0.5); }
+@media (hover:hover) { .sp-btn-cta:hover { transform:translateY(-1.5px); box-shadow:0 8px 20px -6px rgba(29,158,117,0.5); } }
 .sp-btn-cta:active { transform:translateY(0); }
 .sp-ham {
   display:none; background:none; border:0.5px solid var(--border);
@@ -119,7 +119,7 @@ const PAGE_CSS = `
   color:var(--text); align-items:center; justify-content:center;
   transition:background 0.15s, border-color 0.15s;
 }
-.sp-ham:hover { background:var(--bg-3); }
+@media (hover:hover) { .sp-ham:hover { background:var(--bg-3); } }
 .sp-ham-box { position:relative; width:18px; height:12px; }
 .sp-ham-box span {
   position:absolute; left:0; width:100%; height:2px; border-radius:2px; background:currentColor;
@@ -154,7 +154,8 @@ const PAGE_CSS = `
   font-family:var(--font-inter,'Inter',sans-serif); font-size:16px; font-weight:400; color:var(--text);
   text-align:left; cursor:pointer; transition:background 0.15s, color 0.15s;
 }
-.sp-mmenu-row:hover, .sp-mmenu-row:active { background:var(--bg-3); color:var(--accent); }
+@media (hover:hover) { .sp-mmenu-row:hover { background:var(--bg-3); color:var(--accent); } }
+.sp-mmenu-row:active { background:var(--bg-3); color:var(--accent); }
 .sp-mmenu-row:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
 .sp-mmenu-div { height:0.5px; background:var(--border); margin:10px 4px; }
 .sp-mmenu-theme {
@@ -224,6 +225,9 @@ const PAGE_CSS = `
   display:flex; gap:12px; flex-wrap:wrap; justify-content:center; margin-top:34px;
   opacity:0; animation:fadeSlideUp 0.75s 0.4s cubic-bezier(0.22,1,0.36,1) forwards;
 }
+/* .sp-btn-cta is shared with the nav and footer, sized for those tighter contexts.
+   Match it to .sp-btn-hero-s here so the two hero buttons read as one pair. */
+.sp-hero-btns .sp-btn-cta { padding:14px 30px; font-size:15px; border-radius:11px; }
 .sp-btn-hero-s {
   background:transparent; color:var(--text);
   border:1px solid var(--border); border-radius:11px;
@@ -232,9 +236,11 @@ const PAGE_CSS = `
   transition:border-color 0.2s ease, color 0.2s ease, background 0.2s ease,
              transform 0.25s cubic-bezier(0.34,1.56,0.64,1);
 }
-.sp-btn-hero-s:hover {
-  border-color:var(--accent); color:var(--accent);
-  background:var(--accent-bg); transform:translateY(-2px);
+@media (hover:hover) {
+  .sp-btn-hero-s:hover {
+    border-color:var(--accent); color:var(--accent);
+    background:var(--accent-bg); transform:translateY(-2px);
+  }
 }
 .sp-btn-hero-s:active { transform:translateY(0); }
 
@@ -296,7 +302,7 @@ const PAGE_CSS = `
   transition:transform 0.3s cubic-bezier(0.22,1,0.36,1),
              border-color 0.25s ease, background 0.25s ease;
 }
-.sp-pillar:hover { transform:translateY(-5px); border-color:var(--accent-border); background:var(--bg-3); }
+@media (hover:hover) { .sp-pillar:hover { transform:translateY(-5px); border-color:var(--accent-border); background:var(--bg-3); } }
 .sp-pillar:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
 .sp-pillar-ico { color:var(--accent); display:inline-flex; }
 .sp-pillar-t { font-size:1.12rem; font-weight:600; color:var(--text); letter-spacing:-0.02em; }
@@ -306,7 +312,7 @@ const PAGE_CSS = `
   color:var(--accent); display:inline-flex; align-items:center; gap:5px;
   transition:gap 0.25s ease;
 }
-.sp-pillar:hover .sp-pillar-go { gap:10px; }
+@media (hover:hover) { .sp-pillar:hover .sp-pillar-go { gap:10px; } }
 
 /* No scrubbing: the stage un-pins and both states stack as ordinary sections.
    The JS timeline bails out to match, so nothing is left mid-transform. */
@@ -383,13 +389,15 @@ const PAGE_CSS = `
   background:var(--accent); transform:scaleY(0);
   transition:transform 0.45s cubic-bezier(0.22,1,0.36,1);
 }
-.sp-row:hover::before { transform:scaleY(1); }
-.sp-row:hover { background:var(--accent-bg); }
+@media (hover:hover) {
+  .sp-row:hover::before { transform:scaleY(1); }
+  .sp-row:hover { background:var(--accent-bg); }
+}
 .sp-row-lead {
   display:flex; gap:18px; align-items:baseline;
   transition:transform 0.45s cubic-bezier(0.22,1,0.36,1);
 }
-.sp-row:hover .sp-row-lead { transform:translateX(14px); }
+@media (hover:hover) { .sp-row:hover .sp-row-lead { transform:translateX(14px); } }
 .sp-row-share {
   font-family:var(--font-jetbrains-mono,monospace); font-size:12px;
   color:var(--accent); font-variant-numeric:tabular-nums;
@@ -461,8 +469,10 @@ const PAGE_CSS = `
   font-variant-numeric:tabular-nums;
   transition:background 0.25s ease;
 }
-.sp-pay-card:hover .sp-pay-line { background:transparent; }
-.sp-pay-line:hover { background:var(--accent-bg); }
+@media (hover:hover) {
+  .sp-pay-card:hover .sp-pay-line { background:transparent; }
+  .sp-pay-line:hover { background:var(--accent-bg); }
+}
 .sp-pay-to { color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .sp-pay-kind { color:var(--text-3); }
 .sp-pay-amt { color:var(--text); }
@@ -551,7 +561,7 @@ const PAGE_CSS = `
   border-bottom:0.5px solid var(--border);
   transition:background 0.3s ease;
 }
-.sp-priv-row:hover { background:var(--accent-bg); }
+@media (hover:hover) { .sp-priv-row:hover { background:var(--accent-bg); } }
 .sp-priv-t { margin:0; font-size:16px; font-weight:600; letter-spacing:-0.02em; color:var(--text); }
 .sp-priv-d { margin:0; font-size:14.5px; line-height:1.6; color:var(--text-2); max-width:52ch; }
 
@@ -588,7 +598,7 @@ const PAGE_CSS = `
   background:none; border:none; width:100%; text-align:left;
   font-family:inherit; transition:color 0.2s ease;
 }
-.sp-faq-q:hover { color:var(--accent); }
+@media (hover:hover) { .sp-faq-q:hover { color:var(--accent); } }
 
 /* Two strokes rather than a "+" glyph: a text plus cannot become a minus, it can only
    spin. Hiding one stroke while the pair turns actually resolves into a minus. */
@@ -602,7 +612,7 @@ const PAGE_CSS = `
 }
 .sp-faq-icon::before { top:6.25px; left:0; width:14px; height:1.5px; }
 .sp-faq-icon::after { left:6.25px; top:0; width:1.5px; height:14px; }
-.sp-faq-q:hover .sp-faq-icon::before, .sp-faq-q:hover .sp-faq-icon::after { background:var(--accent); }
+@media (hover:hover) { .sp-faq-q:hover .sp-faq-icon::before, .sp-faq-q:hover .sp-faq-icon::after { background:var(--accent); } }
 .sp-faq-item.is-open .sp-faq-icon { transform:rotate(180deg); }
 .sp-faq-item.is-open .sp-faq-icon::after { opacity:0; }
 
@@ -746,11 +756,11 @@ const PAGE_CSS = `
 }
 .sp-f-links { display:flex; flex-direction:column; gap:11px; }
 .sp-f-links .sp-nav-btn { font-size:13px; color:var(--text-2); text-align:left; transition:color 0.15s; }
-.sp-f-links .sp-nav-btn:hover { color:var(--text); }
+@media (hover:hover) { .sp-f-links .sp-nav-btn:hover { color:var(--text); } }
 .sp-f-network { display:flex; flex-direction:column; gap:10px; }
 .sp-f-network p,.sp-f-network a { font-size:13px; color:var(--text-2); text-decoration:none; }
 .sp-f-network a { color:var(--accent); }
-.sp-f-network a:hover { opacity:0.8; }
+@media (hover:hover) { .sp-f-network a:hover { opacity:0.8; } }
 .sp-footer-bot {
   max-width:1240px; margin:36px auto 0;
   padding-top:20px; border-top:0.5px solid var(--border);
@@ -822,10 +832,15 @@ const PAGE_CSS = `
   .sp-cta-actions { margin-top:28px; }
   .sp-sec { padding:64px 20px; }
   .sp-nav { padding:0 20px; }
-  .sp-stage-pin { padding-left:20px; padding-right:20px; }
+  .sp-stage-pin { padding-top:calc(var(--sp-nav-h) + 12px); padding-left:20px; padding-right:20px; }
   .sp-hero-btns { flex-direction:column; gap:12px; margin-top:26px; }
-  .sp-hero-btns .sp-btn-cta { justify-content:center; }
+  .sp-hero-btns .sp-btn-cta { justify-content:center; width:100%; height:54px; border-radius:14px; font-size:16px; }
   .sp-btn-hero-s { width:100%; height:54px; border-radius:14px; display:flex; justify-content:center; align-items:center; font-size:16px; }
+  /* Section header to content gap, doubled from desktop's clamp() floor for mobile only. */
+  .sp-routing-head { padding-bottom:72px; }
+  .sp-pay-grid { margin-top:80px; }
+  .sp-priv-proof { margin:88px auto 0; }
+  .sp-faq-wrap { margin:80px auto 0; }
 }
 @media(max-width:${PILLAR_STACK_BP}px){
   .sp-reveal-h { margin-bottom:28px; }
