@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAccount } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { LayoutDashboard, Wallet, Activity, User, Headphones, Menu, X, ChevronDown, HelpCircle, Banknote, Shield } from 'lucide-react'
+import { LayoutDashboard, Wallet, Activity, User, Headphones, Menu, X, ChevronDown, Banknote, Shield } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { SplitLogo } from '@/components/brand/logo'
 import { ThemeToggle } from '@/components/theme-toggle'
@@ -122,14 +122,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   return (
-    <div className="min-h-screen md:flex" style={{ background: 'var(--bg)' }}>
-      {/* Desktop sidebar */}
-      <aside className="hidden md:block shrink-0 sticky top-0 h-screen" style={{ width: 248, background: 'var(--bg-2)', borderRight: '0.5px solid var(--border)' }}>
+    <div className="flex flex-col md:flex-row overflow-hidden" style={{ height: '100dvh', background: 'var(--bg)' }}>
+      {/* Desktop sidebar: fixed height, never a scroll participant */}
+      <aside className="hidden md:flex md:flex-col shrink-0 h-full" style={{ width: 248, background: 'var(--bg-2)', borderRight: '0.5px solid var(--border)' }}>
         <SidebarInner />
       </aside>
 
       {/* Mobile top bar */}
-      <header className="md:hidden sticky top-0 z-40 flex items-center justify-between" style={{ height: 56, padding: '0 16px', background: 'var(--bg-2)', borderBottom: '0.5px solid var(--border)' }}>
+      <header className="md:hidden shrink-0 flex items-center justify-between" style={{ height: 56, padding: '0 16px', background: 'var(--bg-2)', borderBottom: '0.5px solid var(--border)' }}>
         <Link href="/" aria-label="Split — home" className="flex items-center">
           <SplitLogo size={24} />
         </Link>
@@ -153,32 +153,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      {/* Main content */}
-      <div className="flex-1 min-w-0">
+      {/* Main content: its own bounded scroll region, so sidebar and footer
+          never move with it, no matter how tall a page's content gets. */}
+      <div className="flex-1 min-w-0 flex flex-col min-h-0">
         {isConnecting ? (
-          <main className="flex items-center justify-center min-h-[60vh]">
+          <main className="flex-1 overflow-y-auto flex items-center justify-center">
             <p className="text-sm" style={{ color: 'var(--text-3)' }}>Connecting…</p>
           </main>
         ) : !isConnected ? (
-          <main className="flex flex-col items-center justify-center min-h-[70vh] gap-4 px-4 text-center">
+          <main className="flex-1 overflow-y-auto flex flex-col items-center justify-center gap-4 px-4 text-center">
             <p className="text-base font-medium" style={{ color: 'var(--text)' }}>Connect your wallet to continue</p>
             <p className="text-sm max-w-xs" style={{ color: 'var(--text-2)' }}>Split works with any EVM wallet on Arc Testnet.</p>
             <ConnectButton />
           </main>
         ) : (
-          <>
-            <main style={{ padding: 24 }}>{children}</main>
-            <footer className="flex items-center justify-center gap-4 flex-wrap" style={{ padding: '16px 24px 28px', fontSize: 12, color: 'var(--text-3)' }}>
-              <span className="inline-flex items-center gap-1.5">
-                <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 999, background: 'var(--accent)' }} />
-                All systems operational
-              </span>
-              <span style={{ opacity: 0.5 }}>|</span>
-              <span className="inline-flex items-center gap-1">
-                All amounts are in USDC <HelpCircle size={13} />
-              </span>
-            </footer>
-          </>
+          <main className="flex-1 overflow-y-auto" style={{ padding: 24 }}>{children}</main>
         )}
       </div>
     </div>

@@ -26,12 +26,18 @@ export function PayLinks({ handle, linkToken }: { handle: string; linkToken: str
 
   const encoded = encodeURIComponent(handle)
   return (
-    <section style={{ ...card(), marginTop: 16 }}>
+    <section style={card()}>
       <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Your pay links</h2>
       <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2, marginBottom: 12 }}>
         Two separate links. Share whichever fits the payment - nothing to switch on or off.
       </p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <PayLinkRow
+          tone="public"
+          label="Normal link"
+          hint="Ordinary transfer, publicly visible on-chain. Splits across your buckets."
+          href={`${origin}/pay/${encoded}`}
+        />
         {linkToken && (
           <PayLinkRow
             tone="private"
@@ -40,12 +46,6 @@ export function PayLinks({ handle, linkToken }: { handle: string; linkToken: str
             href={`${origin}/pay/${linkToken}`}
           />
         )}
-        <PayLinkRow
-          tone="public"
-          label="Normal link"
-          hint="Ordinary transfer, publicly visible on-chain. Splits across your buckets."
-          href={`${origin}/pay/${encoded}`}
-        />
       </div>
       {!linkToken && (
         <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 10, lineHeight: 1.5 }}>
