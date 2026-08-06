@@ -42,6 +42,7 @@ export function AddBucketModal({ onClose }: Props) {
   // a wallet it can also spend from.
   const [destMode, setDestMode] = useState<'hold' | 'manual' | 'generated'>('hold')
   const [status, setStatus]     = useState<string | null>(null)
+  const [primaryConfirmed, setPrimaryConfirmed] = useState(false)
 
   // Existing buckets, so the allocation can be checked against the 100% ceiling
   // BEFORE submitting rather than discovering ExceedsBPS after the form is filled.
@@ -66,6 +67,10 @@ export function AddBucketModal({ onClose }: Props) {
   const currentTotalBps = existingBuckets
     .filter((b) => b.active)
     .reduce((sum, b) => sum + b.bps, 0)
+  const trimmedDestination = destStr.trim()
+  const isPrimaryDestination =
+    destMode === 'manual' && !!address && isAddress(trimmedDestination) &&
+    trimmedDestination.toLowerCase() === address.toLowerCase()
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -117,6 +122,10 @@ export function AddBucketModal({ onClose }: Props) {
 
     if (destination === null) {
       setError('Enter a valid destination address, or choose another option.')
+      return
+    }
+    if (isPrimaryDestination && !primaryConfirmed) {
+      setError('Confirm that you understand the privacy impact of using your primary wallet.')
       return
     }
 
@@ -297,7 +306,7 @@ export function AddBucketModal({ onClose }: Props) {
                     type="button"
                     role="radio"
                     aria-checked={selected}
-                    onClick={() => { setDestMode(mode); setError(null) }}
+                    onClick={() => { setDestMode(mode); setPrimaryConfirmed(false); setError(null) }}
                     className={[
                       'rounded-xl border px-2 py-2 text-xs font-medium transition',
                       'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--split-accent)]',
@@ -319,9 +328,27 @@ export function AddBucketModal({ onClose }: Props) {
                 placeholder="0x…"
                 aria-label="Destination address"
                 value={destStr}
-                onChange={(e) => setDestStr(e.target.value)}
+                onChange={(e) => { setDestStr(e.target.value); setPrimaryConfirmed(false) }}
                 className={`${inputCls} font-mono mt-1.5`}
               />
+            )}
+
+            {isPrimaryDestination && (
+              <div className="mt-1.5 rounded-xl border border-amber-400/25 bg-amber-400/5 p-3">
+                <p className="text-[11px] leading-relaxed text-amber-300">
+                  Payments routed here are publicly linked to your connected wallet. Use a
+                  generated Split Wallet when you want a separate destination.
+                </p>
+                <label className="mt-2 flex cursor-pointer items-start gap-2 text-[11px] leading-relaxed text-[var(--split-text-secondary)]">
+                  <input
+                    type="checkbox"
+                    checked={primaryConfirmed}
+                    onChange={(e) => setPrimaryConfirmed(e.target.checked)}
+                    className="mt-0.5 accent-[var(--split-accent)]"
+                  />
+                  <span>I understand that this bucket links payments to my primary wallet.</span>
+                </label>
+              </div>
             )}
 
             {destMode === 'hold' && (
@@ -396,6 +423,7 @@ export function AddBucketModal({ onClose }: Props) {
                 // wallet to own the reservation. Blocked here rather than failing
                 // after the user has already committed to submitting.
                 (destMode === 'manual' && !isAddress(destStr.trim())) ||
+                (isPrimaryDestination && !primaryConfirmed) ||
                 (destMode === 'generated' && !address)
               }
               className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-[#111110] hover:opacity-85 transition-opacity disabled:opacity-40"

@@ -1,12 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useAccount } from 'wagmi'
+import { useAccount, useReadContract } from 'wagmi'
 import { ShieldCheck, Loader2, ScanLine, Eye, Clock, Vault as VaultIcon } from 'lucide-react'
 import { formatUnits } from 'viem'
 import { formatUsdc, shortAddress } from '@/lib/format'
 import { useStealth, type DetectedPayment, type ClaimAllProgress } from '@/hooks/use-stealth'
 import { ClaimDialog } from '@/components/stealth/claim-dialog'
+import { getSplitContract, splitAbi, ZERO_ADDRESS, type SplitBucket } from '@/lib/contracts'
 
 function fmt(raw: bigint): string {
   try { return formatUsdc(raw) } catch { return '?' }
@@ -27,8 +28,20 @@ function formatUsdcPrecise(raw: bigint): string {
 }
 
 export default function PrivacyPage() {
-  const { isConnected } = useAccount()
+  const { address, isConnected } = useAccount()
   const stealth = useStealth()
+
+  const { data: rawBuckets } = useReadContract({
+    address: getSplitContract(),
+    abi: splitAbi,
+    functionName: 'getBuckets',
+    args: [address ?? ZERO_ADDRESS],
+    query: { enabled: !!address },
+  })
+  const buckets = (rawBuckets ?? []) as SplitBucket[]
+  const hasPrimaryWalletDestination = !!address && buckets.some(
+    (bucket) => bucket.active && bucket.destination.toLowerCase() === address.toLowerCase(),
+  )
 
   const [enabled, setEnabled]   = useState<boolean | null>(null)
   const [enabling, setEnabling] = useState(false)
@@ -313,6 +326,7 @@ export default function PrivacyPage() {
           count={claimable.length}
           totalRaw={claimableTotal}
           vaultReady={stealth.vaultAddress !== null}
+          hasPrimaryWalletDestination={hasPrimaryWalletDestination}
           onCancel={() => setClaimAllOpen(false)}
           onConfirm={(mode, useVault) => { void handleClaimAll(mode, useVault) }}
         />
@@ -324,6 +338,7 @@ export default function PrivacyPage() {
           claim={stealth.claim}
           previewPrivateClaim={stealth.previewPrivateClaim}
           vaultAddress={stealth.vaultAddress}
+          hasPrimaryWalletDestination={hasPrimaryWalletDestination}
           onClose={() => setClaimTarget(null)}
           onClaimed={() => { setClaimVersion((v) => v + 1); void handleScan() }}
         />
@@ -342,11 +357,12 @@ export default function PrivacyPage() {
  * batch is N transactions, not one. Nobody should start ten wallet-funded claims
  * expecting a single fee.
  */
-function ClaimAllDialog({ count, totalRaw, vaultReady, onCancel, onConfirm }: {
+function ClaimAllDialog({ count, totalRaw, vaultReady, hasPrimaryWalletDestination, onCancel, onConfirm }: {
   count: number
   totalRaw: bigint
   /** Vault already unlocked this session, so routing to it costs no extra signature. */
   vaultReady: boolean
+  hasPrimaryWalletDestination: boolean
   onCancel: () => void
   onConfirm: (mode: 'quick' | 'private', useVault: boolean) => void
 }) {
@@ -383,6 +399,10 @@ function ClaimAllDialog({ count, totalRaw, vaultReady, onCancel, onConfirm }: {
           />
         </div>
 
+        {mode === 'private' && hasPrimaryWalletDestination && (
+          <PrimaryWalletPrivacyWarning />
+        )}
+
         {/* Bulk claims must make the same Vault decision the single-claim dialog
             asks about, or hold portions would be skipped across every payment
             with no explanation. */}
@@ -416,6 +436,17 @@ function ClaimAllDialog({ count, totalRaw, vaultReady, onCancel, onConfirm }: {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function PrimaryWalletPrivacyWarning() {
+  return (
+    <div role="note" style={{ marginBottom: 16, borderRadius: 12, padding: '11px 13px', background: 'rgba(245,158,11,.08)', border: '0.5px solid rgba(245,158,11,.35)' }}>
+      <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.55 }}>
+        <strong style={{ color: 'var(--text)' }}>A bucket sends to your primary wallet.</strong>{' '}
+        Its share will publicly link the private payment address to your connected wallet, reducing the privacy benefit. Use a generated Split Wallet destination to keep that share separate.
+      </p>
     </div>
   )
 }

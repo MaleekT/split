@@ -16,6 +16,8 @@ interface Props {
   previewPrivateClaim: (payment: DetectedPayment) => Promise<{ holdPortionRaw: bigint; needsVault: boolean }>
   /** Vault address if already unlocked this session; null means a signature is needed. */
   vaultAddress: `0x${string}` | null
+  /** Whether an active bucket sends directly to the connected primary wallet. */
+  hasPrimaryWalletDestination: boolean
   onClose: () => void
   onClaimed: () => void
 }
@@ -41,7 +43,7 @@ const MODES: Record<Mode, { icon: typeof Zap; title: string; sub: string; conseq
 }
 
 export function ClaimDialog({
-  payment, claim, previewPrivateClaim, vaultAddress, onClose, onClaimed,
+  payment, claim, previewPrivateClaim, vaultAddress, hasPrimaryWalletDestination, onClose, onClaimed,
 }: Props) {
   const [mode, setMode]       = useState<Mode>('quick')
   const [phase, setPhase]     = useState<Phase>('choose')
@@ -129,6 +131,15 @@ export function ClaimDialog({
               <div style={{ background: 'var(--bg-3)', border: '0.5px solid var(--border)', borderRadius: 12, padding: '12px 14px' }}>
                 <p style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.55 }}>{chosen.consequence}</p>
               </div>
+
+              {mode === 'private' && hasPrimaryWalletDestination && (
+                <div role="note" style={{ borderRadius: 12, padding: '11px 13px', background: 'rgba(245,158,11,.08)', border: '0.5px solid rgba(245,158,11,.35)' }}>
+                  <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.55 }}>
+                    <strong style={{ color: 'var(--text)' }}>A bucket sends to your primary wallet.</strong>{' '}
+                    Its share will publicly link this private payment address to your connected wallet, reducing the privacy benefit. Use a generated Split Wallet destination to keep that share separate.
+                  </p>
+                </div>
+              )}
 
               <button type="button" onClick={() => void start()}
                 style={{ width: '100%', height: 46, borderRadius: 12, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%)', color: '#04110B', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>

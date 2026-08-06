@@ -30,6 +30,8 @@ interface Props {
   onWithdraw:   () => void
   /** True when this bucket's destination is a wallet Split derived and can spend from. */
   isGenerated?: boolean
+  /** True when this bucket sends to the wallet currently connected to Split. */
+  isPrimary?: boolean
   /** Present only for generated buckets: opens the local-signing send dialog. */
   onSendFromWallet?: () => void
   onSchedule:   () => void
@@ -60,7 +62,7 @@ function Ring({ pct, color, Icon }: { pct: number; color: string; Icon: React.Co
 const actionBtn = 'flex flex-col items-center gap-1 flex-1 rounded-lg py-1.5 transition-colors hover:bg-[rgba(255,255,255,0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]'
 const actionLabel = { fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 11 } as const
 
-export function BucketCard({ bucket, goal, routedTotal, iconSlug, colorIndex, onEdit, onWithdraw, onSchedule, onSetGoal, onDelete, isGenerated = false, onSendFromWallet }: Props) {
+export function BucketCard({ bucket, goal, routedTotal, iconSlug, colorIndex, onEdit, onWithdraw, onSchedule, onSetGoal, onDelete, isGenerated = false, isPrimary = false, onSendFromWallet }: Props) {
   const isHold      = bucket.destination === ZERO_ADDRESS
   const hasGoal     = goal !== undefined && goal > 0n
   const canWithdraw = bucket.balance > 0n
@@ -151,6 +153,11 @@ export function BucketCard({ bucket, goal, routedTotal, iconSlug, colorIndex, on
           {!isHold && isGenerated && (
             <span style={{ fontFamily: "'Inter', sans-serif", marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'rgba(29,158,117,0.9)' }}>
               · SPLIT WALLET
+            </span>
+          )}
+          {!isHold && !isGenerated && isPrimary && (
+            <span style={{ fontFamily: "'Inter', sans-serif", marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--warning, #FBBF24)' }}>
+              · PRIMARY WALLET
             </span>
           )}
         </p>

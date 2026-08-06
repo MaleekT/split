@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { parseUnits } from 'viem'
 import { useAccount, useReadContracts, useWriteContract, useChainId, useSwitchChain } from 'wagmi'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getSplitContract, splitAbi, erc20Abi, USDC, type SplitBucket } from '@/lib/contracts'
+import { getSplitContract, splitAbi, erc20Abi, USDC, ZERO_ADDRESS, type SplitBucket } from '@/lib/contracts'
 import { buildDepositMemo } from '@/lib/memos'
 import { publicClient } from '@/lib/arc'
 import { arcTestnet } from '@/lib/chain'
@@ -59,7 +59,7 @@ export default function DashboardPage() {
   const chainId = useChainId()
   const { switchChainAsync } = useSwitchChain()
   const contractAddress = getSplitContract()
-  const { data: routedTotals } = useRoutedTotals(address)
+  const { data: routedTotals, isPending: routedTotalsPending, isError: routedTotalsError } = useRoutedTotals(address)
   const { data: bucketIcons } = useBucketIcons(address)
 
   // Read-only goals fetch (same source the Buckets page uses) so cards can show the Goal badge/bar.
@@ -96,11 +96,17 @@ export default function DashboardPage() {
   const buckets        = (data?.[0]?.result ?? []) as SplitBucket[]
   const walletBal      = (data?.[1]?.result ?? 0n) as bigint
   const allowance      = (data?.[2]?.result ?? 0n) as bigint
-  const holdTotal = buckets.reduce((sum, b) => sum + b.balance, 0n)
-  // One figure for everything Split accounts for: held in the contract, the Vault,
-  // and every wallet-bucket destination. Generated and manually-added destinations
-  // count the same - this is what Split has processed, not a net-worth number.
-  const { total: totalBal, isPartial, vaultLocked } = useSplitTotal(buckets, holdTotal)
+  // Match the amount rendered on every bucket card exactly: current contract balance
+  // for holds, cumulative BucketSplit events for destination buckets. Never read the
+  // destination wallet's full balance - it may contain unrelated funds.
+  const bucketTotal = buckets.reduce((sum, b) => {
+    if (b.destination === ZERO_ADDRESS) return sum + b.balance
+    const routed = routedTotals?.[String(b.id)]
+    return sum + (routed ? BigInt(routed) : 0n)
+  }, 0n)
+  const hasDestinationBuckets = buckets.some((b) => b.destination !== ZERO_ADDRESS)
+  const bucketTotalPartial = hasDestinationBuckets && (routedTotalsPending || routedTotalsError)
+  const { total: totalBal, isPartial, vaultLocked } = useSplitTotal(bucketTotal, bucketTotalPartial)
 
   const [depositStr, setDepositStr]     = useState('')
   const [noteStr, setNoteStr]           = useState('')
@@ -355,6 +361,7 @@ export default function DashboardPage() {
                       bucket={b}
                       goal={goals?.[String(b.id)]}
                       isGenerated={!!gen}
+                      isPrimary={b.destination.toLowerCase() === address.toLowerCase()}
                       onSendFromWallet={gen ? () => setSendWallet({
                         bucketName: b.name,
                         derivationIndex: gen.derivationIndex,

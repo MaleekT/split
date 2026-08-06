@@ -1,17 +1,13 @@
 'use client'
 
-import { useMemo } from 'react'
 import { useReadContracts } from 'wagmi'
-import { USDC, erc20Abi, ZERO_ADDRESS, type SplitBucket } from '@/lib/contracts'
+import { USDC, erc20Abi } from '@/lib/contracts'
 import { useStealth } from '@/hooks/use-stealth'
 
 /**
- * Everything Split is currently accounting for: funds held in the contract, the
- * Private Vault, and the live balance of every wallet-bucket destination.
- *
- * Generated and manually-added destinations count identically. This figure is
- * "what Split has processed and is tracking", not a personal net-worth number, so
- * a bucket paying out to someone else's address still belongs in it.
+ * The sum of the amounts shown on the user's bucket cards, plus the Private Vault.
+ * Hold buckets contribute their current contract balance; destination buckets
+ * contribute their per-bucket cumulative routed amount before this hook is called.
  *
  * It deliberately EXCLUDES unclaimed private payments. Those sit at stealth
  * addresses whose whole purpose is being unlinkable to this user, and summing them
@@ -19,7 +15,7 @@ import { useStealth } from '@/hooks/use-stealth'
  * They stay on the Privacy page, behind the local scan.
  */
 export interface SplitTotal {
-  /** Hold-in-contract + Vault + all wallet-bucket destinations. */
+  /** Sum of displayed bucket amounts + Vault. */
   total: bigint
   /**
    * True when at least one component could not be read, so `total` is a floor
@@ -31,35 +27,20 @@ export interface SplitTotal {
   vaultLocked: boolean
 }
 
-export function useSplitTotal(buckets: readonly SplitBucket[], holdTotal: bigint): SplitTotal {
+export function useSplitTotal(bucketTotal: bigint, bucketTotalPartial = false): SplitTotal {
   const stealth = useStealth()
-
-  // Unique non-hold destinations. Deduplicated because two buckets may legitimately
-  // pay the same address, and its balance must not be counted twice.
-  const destinations = useMemo(() => {
-    const seen = new Map<string, `0x${string}`>()
-    for (const b of buckets) {
-      if (b.destination === ZERO_ADDRESS) continue
-      seen.set(b.destination.toLowerCase(), b.destination)
-    }
-    return [...seen.values()]
-  }, [buckets])
 
   // The Vault address is derived client-side and never stored, so it is only known
   // once unlocked this session. Reading a known address costs no signature; we
   // simply cannot ask while it is locked.
   const vaultAddress = stealth.vaultAddress
-  const addresses = useMemo(
-    () => (vaultAddress ? [...destinations, vaultAddress] : destinations),
-    [destinations, vaultAddress],
-  )
 
   const { data } = useReadContracts({
-    contracts: addresses.map((a) => ({
-      address: USDC, abi: erc20Abi, functionName: 'balanceOf', args: [a],
-    } as const)),
+    contracts: vaultAddress ? [{
+      address: USDC, abi: erc20Abi, functionName: 'balanceOf', args: [vaultAddress],
+    } as const] : [],
     query: {
-      enabled: addresses.length > 0,
+      enabled: vaultAddress !== null,
       refetchInterval: 30_000,
       // Arc's public RPC rate-limits concurrent reads: at 25 in flight it returns
       // HTTP 429 for roughly a third and drops the odd connection outright, which
@@ -71,19 +52,17 @@ export function useSplitTotal(buckets: readonly SplitBucket[], holdTotal: bigint
     },
   })
 
-  return useMemo(() => {
-    let sum = holdTotal
-    let failed = 0
+  const vaultResult = data?.[0]
+  const vaultReadable = vaultResult?.status === 'success' && typeof vaultResult.result === 'bigint'
+  const vaultBalance = vaultReadable ? vaultResult.result as bigint : 0n
 
-    addresses.forEach((_, i) => {
-      const res = data?.[i]
-      if (!res || res.status !== 'success' || typeof res.result !== 'bigint') { failed++; return }
-      sum += res.result
-    })
-
-    // A locked Vault is an unknown balance, not an empty one. Treating it as zero
-    // would show a confident total that is quietly wrong.
-    const vaultLocked = vaultAddress === null
-    return { total: sum, isPartial: vaultLocked || failed > 0, vaultLocked }
-  }, [addresses, data, holdTotal, vaultAddress])
+  // A locked Vault is an unknown balance, not an empty one. Treating it as zero
+  // would show a confident total that is quietly wrong.
+  const vaultLocked = vaultAddress === null
+  const vaultReadFailed = vaultAddress !== null && !vaultReadable
+  return {
+    total: bucketTotal + vaultBalance,
+    isPartial: bucketTotalPartial || vaultLocked || vaultReadFailed,
+    vaultLocked,
+  }
 }

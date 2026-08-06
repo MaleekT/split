@@ -221,6 +221,7 @@ export default function SettingsPage() {
                 routedTotal={rawRouted ? BigInt(rawRouted) : 0n}
                 iconSlug={bucketIcons?.[String(b.id)]}
                 colorIndex={index}
+                isPrimary={!!address && b.destination.toLowerCase() === address.toLowerCase()}
                 onEdit={() => setModal({ kind: 'edit', bucket: b })}
                 onWithdraw={() => setModal({ kind: 'withdraw', bucket: b })}
                 onSchedule={() => setModal({ kind: 'schedule', bucket: b })}
