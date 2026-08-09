@@ -149,10 +149,23 @@ export async function sendableBalanceRaw(
   address: `0x${string}`,
   price: bigint,
 ): Promise<bigint> {
-  const balanceWei = await publicClient.getBalance({ address })
-  const reserve    = reserveWei(FALLBACK_TRANSFER_GAS, price)
-  if (balanceWei <= reserve) return 0n
-  return (balanceWei - reserve) / NATIVE_PER_USDC
+  const [nativeBalance, tokenBalance] = await Promise.all([
+    publicClient.getBalance({ address }),
+    publicClient.readContract({ address: USDC, abi: erc20Abi, functionName: 'balanceOf', args: [address] }) as Promise<bigint>,
+  ])
+  const reserve = reserveWei(FALLBACK_TRANSFER_GAS, price)
+  if (nativeBalance <= reserve) return 0n
+  const reserveRaw = reserve / NATIVE_PER_USDC
+  return tokenBalance > reserveRaw ? tokenBalance - reserveRaw : 0n
+}
+
+async function requireNativeGas(address: `0x${string}`, gasUnits: bigint, price: bigint): Promise<void> {
+  const nativeBalance = await publicClient.getBalance({ address })
+  if (nativeBalance <= reserveWei(gasUnits, price)) throw new Error('Balance too low to cover claim gas')
+}
+
+async function usdcBalance(address: `0x${string}`): Promise<bigint> {
+  return publicClient.readContract({ address: USDC, abi: erc20Abi, functionName: 'balanceOf', args: [address] }) as Promise<bigint>
 }
 
 /** Native wei to reserve for `gasUnits` of work, with margin. */
@@ -186,10 +199,13 @@ export async function quickClaim(params: {
 
   // 2. Fresh balance after the approve gas, then size the claim against a real
   //    depositFor estimate.
-  const balanceWei = await publicClient.getBalance({ address: stealth })
-  const roughReserve = reserveWei(FALLBACK_DEPOSIT_GAS, price)
-  if (balanceWei <= roughReserve) throw new Error('Balance too low to cover claim gas')
-  const provisionalAmount = (balanceWei - roughReserve) / NATIVE_PER_USDC
+  await requireNativeGas(stealth, FALLBACK_DEPOSIT_GAS, price)
+  const roughReserveRaw = reserveWei(FALLBACK_DEPOSIT_GAS, price) / NATIVE_PER_USDC
+  const balanceBeforeEstimate = await usdcBalance(stealth)
+  const provisionalAmount = balanceBeforeEstimate > roughReserveRaw
+    ? balanceBeforeEstimate - roughReserveRaw
+    : 0n
+  if (provisionalAmount === 0n) throw new Error('Nothing left to claim')
 
   let estGas = FALLBACK_DEPOSIT_GAS
   try {
@@ -199,10 +215,11 @@ export async function quickClaim(params: {
     })
   } catch { /* keep fallback estimate */ }
 
-  const reserve = reserveWei(estGas, price)
-  if (balanceWei <= reserve) throw new Error('Balance too low to cover claim gas')
-  const amountRaw = (balanceWei - reserve) / NATIVE_PER_USDC
-  if (amountRaw === 0n) throw new Error('Nothing left to claim after gas')
+  await requireNativeGas(stealth, estGas, price)
+  const reserveRaw = reserveWei(estGas, price) / NATIVE_PER_USDC
+  const currentBalance = await usdcBalance(stealth)
+  const amountRaw = currentBalance > reserveRaw ? currentBalance - reserveRaw : 0n
+  if (amountRaw === 0n) throw new Error('Nothing left to claim')
 
   // 3. depositFor routes it through the recipient's buckets.
   const claimTx = await wallet.writeContract({
@@ -238,7 +255,7 @@ export async function privateClaim(params: {
   const stealth = wallet.account!.address
   const price   = await gasPriceWei()
 
-  const balanceWei = await publicClient.getBalance({ address: stealth })
+  const tokenBalance = await usdcBalance(stealth)
 
   // Size the gas reserve to the transfers this claim will ACTUALLY make: one per
   // active auto-send bucket, plus one to the Vault when there is one. Without a
@@ -254,10 +271,9 @@ export async function privateClaim(params: {
     )
   }
 
-  const reserve = reserveWei(BigInt(transferCount) * FALLBACK_TRANSFER_GAS, price)
-  if (balanceWei <= reserve) throw new Error('Balance too low to cover claim gas')
-
-  const claimable = (balanceWei - reserve) / NATIVE_PER_USDC
+  await requireNativeGas(stealth, BigInt(transferCount) * FALLBACK_TRANSFER_GAS, price)
+  const reserveRaw = reserveWei(BigInt(transferCount) * FALLBACK_TRANSFER_GAS, price) / NATIVE_PER_USDC
+  const claimable = tokenBalance > reserveRaw ? tokenBalance - reserveRaw : 0n
   if (claimable === 0n) throw new Error('Nothing left to claim after gas')
 
   const plan = computeClaimPlan(params.buckets, claimable, params.vaultAddress)
@@ -306,15 +322,10 @@ export async function sweepVaultToMain(params: {
   const vault  = wallet.account!.address
   const price  = await gasPriceWei()
 
-  const balanceWei = await publicClient.getBalance({ address: vault })
-  const reserve    = reserveWei(FALLBACK_TRANSFER_GAS, price)
-  if (balanceWei <= reserve) throw new Error('Vault balance is too low to cover the transfer gas')
-
-  // Floor division is required, not incidental: native is 18-decimal and the USDC
-  // facade 6-decimal, so this is the 1e12 conversion. Truncating DOWN is the safe
-  // direction - rounding up would try to move more than the balance covers and
-  // revert. The sub-0.000001 USDC remainder stays in the Vault as dust.
-  const amountRaw = (balanceWei - reserve) / NATIVE_PER_USDC
+  await requireNativeGas(vault, FALLBACK_TRANSFER_GAS, price)
+  const reserveRaw = reserveWei(FALLBACK_TRANSFER_GAS, price) / NATIVE_PER_USDC
+  const tokenBalance = await usdcBalance(vault)
+  const amountRaw = tokenBalance > reserveRaw ? tokenBalance - reserveRaw : 0n
   if (amountRaw === 0n) throw new Error('Nothing left to move after gas')
 
   const txHash = await wallet.writeContract({
