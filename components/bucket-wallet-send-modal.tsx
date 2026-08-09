@@ -85,11 +85,12 @@ export function BucketWalletSendModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      role="dialog" aria-modal="true" aria-label={`Send from ${bucketName}`}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog" aria-modal="true" aria-labelledby="bucket-wallet-send-title"
     >
-      <div className="w-full max-w-sm rounded-2xl border border-[var(--split-border)] bg-[var(--split-bg)] p-5">
+      <div aria-hidden="true" className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} />
+
+      <div className="relative w-full max-w-md rounded-2xl bg-[var(--split-bg-primary)] p-6 shadow-2xl">
         {sentTx ? (
           <div className="text-center">
             <p className="text-lg font-semibold text-[var(--split-text-primary)]">Sent</p>
@@ -113,7 +114,7 @@ export function BucketWalletSendModal({
         ) : (
           <form onSubmit={handleSend} noValidate className="space-y-3">
             <div>
-              <h2 className="text-base font-semibold text-[var(--split-text-primary)]">Send from {bucketName}</h2>
+              <h2 id="bucket-wallet-send-title" className="text-base font-semibold text-[var(--split-text-primary)]">Send from {bucketName}</h2>
               <p className="mt-0.5 font-mono text-xs text-[var(--split-text-tertiary)]">
                 {shortAddress(walletAddress)}
               </p>
