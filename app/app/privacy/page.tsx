@@ -30,6 +30,7 @@ function formatUsdcPrecise(raw: bigint): string {
 export default function PrivacyPage() {
   const { address, isConnected } = useAccount()
   const stealth = useStealth()
+  const [showDust, setShowDust] = useState(false)
 
   const { data: rawBuckets } = useReadContract({
     address: getSplitContract(),
@@ -283,24 +284,30 @@ export default function PrivacyPage() {
                     </div>
                   )}
 
-                  {/* Dust: real funds, but the claim's own gas reserve exceeds
-                      them, so no claim can ever succeed. Shown rather than hidden
-                      (the money is genuinely there) with the Claim action removed,
-                      because offering it would only produce a failed transaction. */}
+                  {/* Dust is real but not actionable. Keep it transparent without
+                      making every tiny stealth remainder dominate the page. */}
                   {dust.length > 0 && (
                     <div style={{ marginTop: 12, borderTop: '0.5px solid var(--border)', paddingTop: 10 }}>
-                      <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 6, lineHeight: 1.5 }}>
-                        Too small to claim. On Arc the gas for a claim is paid out of the payment itself, and these are
-                        smaller than that cost, so they cannot be moved. Usually the remainder left behind by an earlier claim.
-                      </p>
-                      {dust.map((p) => (
-                        <div key={p.stealthAddress} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '6px 2px', opacity: 0.55 }}>
-                          <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-3)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{shortAddress(p.stealthAddress)}</span>
-                          <span style={{ fontSize: 12, color: 'var(--text-3)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-                            {formatUsdcPrecise(p.amountRaw)} USDC
-                          </span>
+                      <button type="button" onClick={() => setShowDust((v) => !v)} aria-expanded={showDust}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '2px 0', border: 0, background: 'none', color: 'var(--text-3)', cursor: 'pointer', textAlign: 'left' }}>
+                        <span style={{ fontSize: 12, lineHeight: 1.5 }}>
+                          Unclaimable dust · {dust.length} address{dust.length === 1 ? '' : 'es'} · {formatUsdcPrecise(dust.reduce((sum, p) => sum + p.amountRaw, 0n))} USDC
+                        </span>
+                        <span aria-hidden="true" style={{ fontSize: 16, lineHeight: 1, transform: showDust ? 'rotate(180deg)' : undefined, transition: 'transform 160ms ease' }}>⌄</span>
+                      </button>
+                      {showDust && (
+                        <div style={{ marginTop: 8 }}>
+                          <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 6, lineHeight: 1.5 }}>
+                            These remainders are smaller than the gas needed to move them. They remain on their stealth wallets and are not lost.
+                          </p>
+                          {dust.map((p) => (
+                            <div key={p.stealthAddress} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '6px 2px', opacity: 0.55 }}>
+                              <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-3)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{shortAddress(p.stealthAddress)}</span>
+                              <span style={{ fontSize: 12, color: 'var(--text-3)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{formatUsdcPrecise(p.amountRaw)} USDC</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
                     </div>
                   )}
 
