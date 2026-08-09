@@ -96,18 +96,6 @@ export default function DashboardPage() {
   const buckets        = (data?.[0]?.result ?? []) as SplitBucket[]
   const walletBal      = (data?.[1]?.result ?? 0n) as bigint
   const allowance      = (data?.[2]?.result ?? 0n) as bigint
-  // Match the amount rendered on every bucket card exactly: current contract balance
-  // for holds, cumulative BucketSplit events for destination buckets. Never read the
-  // destination wallet's full balance - it may contain unrelated funds.
-  const bucketTotal = buckets.reduce((sum, b) => {
-    if (b.destination === ZERO_ADDRESS) return sum + b.balance
-    const routed = routedTotals?.[String(b.id)]
-    return sum + (routed ? BigInt(routed) : 0n)
-  }, 0n)
-  const hasDestinationBuckets = buckets.some((b) => b.destination !== ZERO_ADDRESS)
-  const bucketTotalPartial = hasDestinationBuckets && (routedTotalsPending || routedTotalsError)
-  const { total: totalBal, isPartial, vaultLocked } = useSplitTotal(bucketTotal, bucketTotalPartial)
-
   const [depositStr, setDepositStr]     = useState('')
   const [noteStr, setNoteStr]           = useState('')
   const [depositStep, setDepositStep]   = useState<'idle' | 'switching' | 'approving' | 'depositing'>('idle')
@@ -135,6 +123,47 @@ export default function DashboardPage() {
       .catch(() => { /* hint only: the dashboard still renders without it */ })
     return () => { alive = false }
   }, [bucketWallets])
+
+  // Private Claims transfer directly to generated bucket wallets and do not emit
+  // Split BucketSplit events. Read those dedicated wallets' live USDC balances.
+  const generatedAddresses = useMemo(
+    () => generatedWallets.map((w) => w.walletAddress as `0x${string}`),
+    [generatedWallets],
+  )
+  const { data: generatedBalanceByAddress = new Map<string, bigint>() } = useQuery({
+    queryKey: ['generated-wallet-balances', generatedAddresses],
+    enabled: generatedAddresses.length > 0,
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      const results = await publicClient.multicall({
+        contracts: generatedAddresses.map((wallet) => ({
+          address: USDC, abi: erc20Abi, functionName: 'balanceOf', args: [wallet],
+        } as const)),
+        allowFailure: true,
+      })
+      const out = new Map<string, bigint>()
+      generatedAddresses.forEach((wallet, i) => {
+        const result = results[i]
+        if (result?.status === 'success' && typeof result.result === 'bigint') {
+          out.set(wallet.toLowerCase(), result.result)
+        }
+      })
+      return out
+    },
+  })
+
+  // Match every card's source: contract balance for holds, live balance for
+  // dedicated generated wallets, and cumulative events for other destinations.
+  const bucketTotal = buckets.reduce((sum, b) => {
+    if (b.destination === ZERO_ADDRESS) return sum + b.balance
+    const generatedBalance = generatedBalanceByAddress.get(b.destination.toLowerCase())
+    if (generatedBalance !== undefined) return sum + generatedBalance
+    const routed = routedTotals?.[String(b.id)]
+    return sum + (routed ? BigInt(routed) : 0n)
+  }, 0n)
+  const hasDestinationBuckets = buckets.some((b) => b.destination !== ZERO_ADDRESS)
+  const bucketTotalPartial = hasDestinationBuckets && (routedTotalsPending || routedTotalsError)
+  const { total: totalBal, isPartial, vaultLocked } = useSplitTotal(bucketTotal, bucketTotalPartial)
 
   // Returns null for empty/invalid input — caller treats null as "not ready"
   const parsedDepositAmount = useMemo<bigint | null>(() => {
@@ -411,7 +440,10 @@ export default function DashboardPage() {
             ) : (
               <div className="bucket-grid">
                 {buckets.map((b, index) => {
-                  const raw = routedTotals?.[String(b.id)]
+                  const liveGeneratedBalance = generatedBalanceByAddress.get(b.destination.toLowerCase())
+                  const raw = liveGeneratedBalance !== undefined
+                    ? String(liveGeneratedBalance)
+                    : routedTotals?.[String(b.id)]
                   // Matched on the CHAIN destination, not on the bucket id alone, so
                   // a stale hint row cannot attach the send action to the wrong
                   // address. sendFrom re-derives and re-checks before moving funds.
