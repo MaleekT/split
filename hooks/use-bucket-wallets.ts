@@ -224,7 +224,8 @@ export function useBucketWallets() {
     })
     const tx = await wallet.writeContract({
       address: USDC, abi: erc20TransferAbi, functionName: 'transfer', args: [to, amountRaw],
-      chain: arcTestnet, account: wallet.account!,
+      chain: arcTestnet, account: wallet.account!, gas: 90_000n,
+      maxFeePerGas: price, maxPriorityFeePerGas: 0n,
     })
     // Resilient wait: a throttled RPC must not make a landed transfer report itself
     // as failed, which is exactly the bug fixed in aa9f179 for claims.

@@ -113,7 +113,18 @@ export const QUICK_CLAIM_GAS = APPROVE_GAS + DEPOSIT_GAS
 
 /** Gas reserve for `gasUnits` of work, expressed in 6-decimal USDC units. */
 export function claimReserveRaw(gasPriceWei: bigint, gasUnits: bigint = QUICK_CLAIM_GAS): bigint {
-  return (gasUnits * gasPriceWei * GAS_MARGIN) / NATIVE_PER_USDC
+  const costWei = gasUnits * gasPriceWei * GAS_MARGIN
+  return (costWei + NATIVE_PER_USDC - 1n) / NATIVE_PER_USDC
+}
+
+/**
+ * Maximum token balance consumed by a transaction's upfront gas reservation.
+ * Arc exposes the gas token through a 6-decimal USDC facade, so round UP: one
+ * raw unit too little makes the ERC-20 call see a balance below its argument.
+ */
+export function transactionFeeReserveRaw(gasLimit: bigint, maxFeePerGas: bigint): bigint {
+  const costWei = gasLimit * maxFeePerGas
+  return (costWei + NATIVE_PER_USDC - 1n) / NATIVE_PER_USDC
 }
 
 /**

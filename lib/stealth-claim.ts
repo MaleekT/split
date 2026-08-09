@@ -18,7 +18,7 @@ import { publicClient } from './arc'
 import { USDC, erc20Abi, getSplitContract, splitAbi, ZERO_ADDRESS } from './contracts'
 import {
   computeClaimPlan, claimTransferCount,
-  NATIVE_PER_USDC, GAS_MARGIN, DEPOSIT_GAS, TRANSFER_GAS,
+  NATIVE_PER_USDC, GAS_MARGIN, DEPOSIT_GAS, TRANSFER_GAS, transactionFeeReserveRaw,
   type ClaimBucket,
 } from './claim-math'
 
@@ -126,7 +126,30 @@ export async function waitForReceipt(hash: `0x${string}`): Promise<void> {
 
 /** Current gas price, with a fallback so a flaky RPC cannot block a claim. */
 export async function gasPriceWei(): Promise<bigint> {
+  try {
+    const fees = await publicClient.estimateFeesPerGas()
+    if (fees.maxFeePerGas !== undefined) return fees.maxFeePerGas
+  } catch { /* fall through */ }
   try { return await publicClient.getGasPrice() } catch { return 20_000_000_000n } // 20 gwei fallback
+}
+
+interface FeeQuote {
+  maxFeePerGas:         bigint
+  maxPriorityFeePerGas: bigint
+}
+
+async function feeQuote(): Promise<FeeQuote> {
+  try {
+    const fees = await publicClient.estimateFeesPerGas()
+    if (fees.maxFeePerGas !== undefined) {
+      return {
+        maxFeePerGas: fees.maxFeePerGas,
+        maxPriorityFeePerGas: fees.maxPriorityFeePerGas ?? 0n,
+      }
+    }
+  } catch { /* use a conservative legacy-compatible quote */ }
+  const price = await gasPriceWei()
+  return { maxFeePerGas: price, maxPriorityFeePerGas: 0n }
 }
 
 /**
@@ -155,7 +178,7 @@ export async function sendableBalanceRaw(
   ])
   const reserve = reserveWei(FALLBACK_TRANSFER_GAS, price)
   if (nativeBalance <= reserve) return 0n
-  const reserveRaw = reserve / NATIVE_PER_USDC
+  const reserveRaw = transactionFeeReserveRaw(FALLBACK_TRANSFER_GAS, price)
   return tokenBalance > reserveRaw ? tokenBalance - reserveRaw : 0n
 }
 
@@ -187,7 +210,8 @@ export async function quickClaim(params: {
   const wallet  = walletFor(params.stealthPrivateKey)
   const stealth = wallet.account!.address
   const split   = getSplitContract()
-  const price   = await gasPriceWei()
+  const fees    = await feeQuote()
+  const price   = fees.maxFeePerGas
 
   // 1. Approve Split (max; the stealth address is single-use, so a lingering
   //    allowance is harmless and it will hold nothing after the claim).
@@ -200,7 +224,7 @@ export async function quickClaim(params: {
   // 2. Fresh balance after the approve gas, then size the claim against a real
   //    depositFor estimate.
   await requireNativeGas(stealth, FALLBACK_DEPOSIT_GAS, price)
-  const roughReserveRaw = reserveWei(FALLBACK_DEPOSIT_GAS, price) / NATIVE_PER_USDC
+  const roughReserveRaw = transactionFeeReserveRaw(FALLBACK_DEPOSIT_GAS, price)
   const balanceBeforeEstimate = await usdcBalance(stealth)
   const provisionalAmount = balanceBeforeEstimate > roughReserveRaw
     ? balanceBeforeEstimate - roughReserveRaw
@@ -216,7 +240,8 @@ export async function quickClaim(params: {
   } catch { /* keep fallback estimate */ }
 
   await requireNativeGas(stealth, estGas, price)
-  const reserveRaw = reserveWei(estGas, price) / NATIVE_PER_USDC
+  const gasLimit = estGas > FALLBACK_DEPOSIT_GAS ? estGas * GAS_MARGIN : FALLBACK_DEPOSIT_GAS
+  const reserveRaw = transactionFeeReserveRaw(gasLimit, price)
   const currentBalance = await usdcBalance(stealth)
   const amountRaw = currentBalance > reserveRaw ? currentBalance - reserveRaw : 0n
   if (amountRaw === 0n) throw new Error('Nothing left to claim')
@@ -225,6 +250,7 @@ export async function quickClaim(params: {
   const claimTx = await wallet.writeContract({
     address: split, abi: splitAbi, functionName: 'depositFor',
     args: [params.mainAddress, amountRaw], chain: arcTestnet, account: wallet.account!,
+    gas: gasLimit, maxFeePerGas: fees.maxFeePerGas, maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
   })
   await waitForReceipt(claimTx)
 
@@ -253,7 +279,8 @@ export async function privateClaim(params: {
 }): Promise<PrivateClaimResult> {
   const wallet  = walletFor(params.stealthPrivateKey)
   const stealth = wallet.account!.address
-  const price   = await gasPriceWei()
+  const fees    = await feeQuote()
+  const price   = fees.maxFeePerGas
 
   const tokenBalance = await usdcBalance(stealth)
 
@@ -272,7 +299,7 @@ export async function privateClaim(params: {
   }
 
   await requireNativeGas(stealth, BigInt(transferCount) * FALLBACK_TRANSFER_GAS, price)
-  const reserveRaw = reserveWei(BigInt(transferCount) * FALLBACK_TRANSFER_GAS, price) / NATIVE_PER_USDC
+  const reserveRaw = transactionFeeReserveRaw(BigInt(transferCount) * FALLBACK_TRANSFER_GAS, price)
   const claimable = tokenBalance > reserveRaw ? tokenBalance - reserveRaw : 0n
   if (claimable === 0n) throw new Error('Nothing left to claim after gas')
 
@@ -291,7 +318,8 @@ export async function privateClaim(params: {
   for (const t of plan.autoSends) {
     const tx = await wallet.writeContract({
       address: USDC, abi: erc20TransferAbi, functionName: 'transfer', args: [t.destination, t.amount],
-      chain: arcTestnet, account: wallet.account!,
+      chain: arcTestnet, account: wallet.account!, gas: FALLBACK_TRANSFER_GAS,
+      maxFeePerGas: fees.maxFeePerGas, maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
     })
     await waitForReceipt(tx)
     transfers.push(tx)
@@ -320,17 +348,19 @@ export async function sweepVaultToMain(params: {
 }): Promise<{ txHash: `0x${string}`; amountRaw: bigint }> {
   const wallet = walletFor(params.vaultPrivateKey)
   const vault  = wallet.account!.address
-  const price  = await gasPriceWei()
+  const fees   = await feeQuote()
+  const price  = fees.maxFeePerGas
 
   await requireNativeGas(vault, FALLBACK_TRANSFER_GAS, price)
-  const reserveRaw = reserveWei(FALLBACK_TRANSFER_GAS, price) / NATIVE_PER_USDC
+  const reserveRaw = transactionFeeReserveRaw(FALLBACK_TRANSFER_GAS, price)
   const tokenBalance = await usdcBalance(vault)
   const amountRaw = tokenBalance > reserveRaw ? tokenBalance - reserveRaw : 0n
   if (amountRaw === 0n) throw new Error('Nothing left to move after gas')
 
   const txHash = await wallet.writeContract({
     address: USDC, abi: erc20TransferAbi, functionName: 'transfer',
-    args: [params.mainAddress, amountRaw],
+    args: [params.mainAddress, amountRaw], gas: FALLBACK_TRANSFER_GAS,
+    maxFeePerGas: fees.maxFeePerGas, maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
     chain: arcTestnet, account: wallet.account!,
   })
   await waitForReceipt(txHash)
