@@ -18,7 +18,10 @@ export default function ActivityPage() {
       </p>
       <div className="grid gap-5 lg:grid-cols-[1fr_380px] items-start">
         <ActivityFeed address={address} />
-        <div className="lg:sticky lg:top-6 lg:self-start">
+        {/* Same fix as the dashboard: the sticky offset is measured from inside
+            <main>'s own 24px padding, so `top-6` pushed this card 24px below the
+            Activity feed beside it even at the top of the page. */}
+        <div className="lg:sticky lg:top-0 lg:self-start">
           <InsightsCard address={address} large />
         </div>
       </div>

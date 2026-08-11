@@ -474,6 +474,19 @@ code {
   .bucket-grid { grid-template-columns: 1fr; }
 }
 
+/* ── Invisible scrollbar ───────────────────────────────────────────────────────
+   Hides the scrollbar chrome only. Wheel, trackpad, touch and keyboard scrolling
+   are untouched, and the element keeps its scroll container semantics, so screen
+   readers and keyboard users can still reach the overflowing content. */
+.no-scrollbar {
+  scrollbar-width: none;        /* Firefox */
+  -ms-overflow-style: none;     /* legacy Edge */
+}
+.no-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 /* ── Badge ─────────────────────────────────────────────────────────────────── */
 .badge {
   display: inline-flex;

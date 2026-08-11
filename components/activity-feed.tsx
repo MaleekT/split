@@ -84,7 +84,16 @@ export function ActivityFeed({ address, compact = false }: Props) {
 
   const items = compact ? (data ?? []).slice(0, 6) : (data ?? [])
 
-  const card = { background: 'var(--bg-2)', border: '0.5px solid var(--border)', borderRadius: 14, overflow: 'hidden' as const }
+  // `minHeight: 0` matters: this card is a flex child of the dashboard's capped
+  // right column, so it gets shrunk to fit. Without it the card kept its content
+  // height while `overflow: hidden` clipped the list inside, leaving the last
+  // entries permanently unreachable. Shrinking the card AND the list together is
+  // what keeps the end of the list scrollable to.
+  const card = {
+    background: 'var(--bg-2)', border: '0.5px solid var(--border)', borderRadius: 14,
+    overflow: 'hidden' as const,
+    display: 'flex' as const, flexDirection: 'column' as const, minHeight: 0,
+  }
 
   const header = (
     <div className="flex items-center justify-between" style={{ padding: '14px 18px', borderBottom: '0.5px solid var(--border)' }}>
@@ -134,7 +143,14 @@ export function ActivityFeed({ address, compact = false }: Props) {
   return (
     <div style={card}>
       {header}
-      <ul className={compact ? 'lg:max-h-[calc(100vh-240px)] lg:overflow-y-auto' : ''} style={{ padding: '8px 18px' }}>
+      {/* Fill whatever height the card actually has rather than a hand-written
+          cap. The old `max-h-[calc(100vh-240px)]` was a second, independent height
+          limit that disagreed with the right column's own cap, so on shorter
+          windows the list was taller than the card containing it and its final
+          entries sat below the clipped edge, scrollable but never visible.
+          `min-h-0` is required: a flex child will not shrink below its content
+          without it. */}
+      <ul className={compact ? 'lg:flex-1 lg:min-h-0 lg:overflow-y-auto no-scrollbar' : ''} style={{ padding: '8px 18px' }}>
         {items.map((item, idx) => {
           const { Icon, color, bg } = iconFor(item.kind)
           const sub = item.breakdown && item.breakdown.length > 0 ? breakdownText(item.breakdown) : item.subtitle

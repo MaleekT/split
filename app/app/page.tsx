@@ -31,6 +31,13 @@ import { AlertTriangle, Eye, EyeOff, Copy, Download, Plus, X } from 'lucide-reac
 
 const TX_TIMEOUT_MS = 30_000
 
+// How long the Total in Split figure waits for its slow sources before showing
+// what it has. Sized against the measured behaviour of /api/buckets/routed:
+// ~0.9s warm, ~170s cold. Long enough to absorb the warm case (which is what made
+// the figure visibly jump on refresh), short enough that a cold backend never
+// leaves the user staring at a skeleton.
+const SLOW_SOURCE_GRACE_MS = 3_000
+
 // Wait for a receipt but never hang the UI. A pending tx or unresponsive RPC must not
 // freeze the button on "Approving…"/"Depositing…" forever — Promise.race hard-caps the wait.
 async function waitForReceiptCapped(hash: `0x${string}`): Promise<void> {
@@ -116,13 +123,21 @@ export default function DashboardPage() {
   const [sendWallet, setSendWallet] = useState<
     { bucketName: string; derivationIndex: number; walletAddress: `0x${string}` } | null
   >(null)
+  // Resolved, not "found something": the Total in Split figure waits on this, so
+  // it must flip even when the lookup fails or returns nothing. Otherwise a user
+  // with no generated wallets would sit on the skeleton forever.
+  const [generatedWalletsResolved, setGeneratedWalletsResolved] = useState(false)
+  const listGenerated = bucketWallets.listGenerated
   useEffect(() => {
     let alive = true
-    void bucketWallets.listGenerated()
+    void listGenerated()
       .then((w) => { if (alive) setGeneratedWallets(w) })
       .catch(() => { /* hint only: the dashboard still renders without it */ })
+      .finally(() => { if (alive) setGeneratedWalletsResolved(true) })
     return () => { alive = false }
-  }, [bucketWallets])
+    // Depends on the stable `listGenerated` callback, not the hook's return object,
+    // which is a fresh literal every render and would re-fire this on each one.
+  }, [listGenerated])
 
   // Private Claims transfer directly to generated bucket wallets and do not emit
   // Split BucketSplit events. Read those dedicated wallets' live USDC balances.
@@ -130,7 +145,7 @@ export default function DashboardPage() {
     () => generatedWallets.map((w) => w.walletAddress as `0x${string}`),
     [generatedWallets],
   )
-  const { data: generatedBalanceByAddress = new Map<string, bigint>() } = useQuery({
+  const { data: generatedBalanceByAddress = new Map<string, bigint>(), isLoading: generatedBalancesLoading } = useQuery({
     queryKey: ['generated-wallet-balances', generatedAddresses],
     enabled: generatedAddresses.length > 0,
     refetchInterval: 30_000,
@@ -164,6 +179,34 @@ export default function DashboardPage() {
   const hasDestinationBuckets = buckets.some((b) => b.destination !== ZERO_ADDRESS)
   const bucketTotalPartial = hasDestinationBuckets && (routedTotalsPending || routedTotalsError)
   const { total: totalBal, isPartial, vaultLocked } = useSplitTotal(bucketTotal, bucketTotalPartial)
+
+  // The total is assembled from sources that land at very different speeds: hold
+  // balances arrive in one contract read, while an auto-send bucket's figure comes
+  // from a history scan. Rendering as soon as the fastest one lands counted the
+  // slow ones as zero, so the figure appeared low and then visibly jumped.
+  //
+  // Waiting for them is the fix, but waiting UNCONDITIONALLY is not: measured on
+  // this project's own endpoint, that scan answers in 0.9s against a warm cache
+  // and 170s against a cold one. An unbounded wait would trade a two-second jump
+  // for a three-minute skeleton. So the wait is bounded - past the grace period we
+  // show what we have and label it, which the `isPartial` notice below already does.
+  //
+  // The Vault is excluded entirely: it needs a wallet signature and may never be
+  // unlocked, so it could never satisfy a wait.
+  const [graceElapsed, setGraceElapsed] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setGraceElapsed(true), SLOW_SOURCE_GRACE_MS)
+    return () => clearTimeout(t)
+  }, [])
+
+  const slowSourcesPending =
+    (hasDestinationBuckets && routedTotalsPending && !routedTotalsError) ||
+    !generatedWalletsResolved ||
+    generatedBalancesLoading
+
+  // `isLoading` stays unbounded on purpose: it is the bucket list itself, so
+  // without it there is no figure to show at all, only a confident zero.
+  const totalPending = isLoading || (!graceElapsed && slowSourcesPending)
 
   // Returns null for empty/invalid input — caller treats null as "not ready"
   const parsedDepositAmount = useMemo<bigint | null>(() => {
@@ -329,24 +372,33 @@ export default function DashboardPage() {
                 </button>
               </div>
 
-              {isLoading ? (
-                <div className="h-12 w-44 rounded-lg animate-pulse mt-1" style={{ background: 'var(--bg-3)' }} />
-              ) : hideBalances ? (
-                <p className="font-mono font-bold leading-none mt-1" style={{ fontSize: 'clamp(2rem,4vw,3rem)', color: 'var(--text)' }}>••••</p>
+              {totalPending ? (
+                <>
+                  <div className="h-12 w-44 rounded-lg animate-pulse mt-1" style={{ background: 'var(--bg-3)' }} />
+                  <div className="h-3 w-24 rounded animate-pulse" style={{ background: 'var(--bg-3)', marginTop: 9 }} />
+                </>
               ) : (
-                <UsdcAmount value={totalBal} className="block font-bold leading-none text-[clamp(2rem,4vw,3rem)] mt-1" />
+                <>
+                  {hideBalances ? (
+                    <p className="font-mono font-bold leading-none mt-1" style={{ fontSize: 'clamp(2rem,4vw,3rem)', color: 'var(--text)' }}>••••</p>
+                  ) : (
+                    <UsdcAmount value={totalBal} className="block font-bold leading-none text-[clamp(2rem,4vw,3rem)] mt-1" />
+                  )}
+                  <p className="font-mono" style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 6 }}>≈ ${mask(formatUsdc(totalBal))} USD</p>
+                </>
               )}
-              <p className="font-mono" style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 6 }}>≈ ${mask(formatUsdc(totalBal))} USD</p>
 
               {/* A locked Vault means part of the total is unknown, not zero.
                   Saying so keeps the figure honest: silently omitting the Vault
                   would understate the real total, which is the bug this warning
                   already exists to prevent. */}
-              {!isLoading && isPartial && (
+              {!totalPending && isPartial && (
                 <p role="status" aria-live="polite" style={{ fontSize: 11.5, lineHeight: 1.5, color: 'var(--warning, #FBBF24)', marginTop: 6, maxWidth: 320 }}>
-                  {vaultLocked
-                    ? 'Partial: your Private Vault is locked, so its balance is not counted yet. Open it on the Privacy page to include it.'
-                    : 'Partial: some balances could not be read just now.'}
+                  {slowSourcesPending
+                    ? 'Still adding up your auto-send buckets, so this figure will rise when it finishes.'
+                    : vaultLocked
+                      ? 'Partial: your Private Vault is locked, so its balance is not counted yet. Open it on the Privacy page to include it.'
+                      : 'Partial: some balances could not be read just now.'}
                 </p>
               )}
 
@@ -506,9 +558,18 @@ export default function DashboardPage() {
         </div>
 
         {/* ── RIGHT COLUMN ── */}
-        <div className="flex flex-col gap-5 min-w-0 lg:sticky lg:top-6 lg:self-start lg:max-h-[calc(100vh-48px)]">
+        {/* `top-0`, not `top-6`: the sticky offset is measured from inside <main>'s
+            own 24px padding, so a 24px offset pushed this column 24px lower than
+            the Total in Split card even with the page scrolled to the very top.
+            Zero lines the two cards up at rest and still pins on scroll. */}
+        <div className="flex flex-col gap-5 min-w-0 lg:sticky lg:top-0 lg:self-start lg:max-h-[calc(100vh-48px)]">
           <ActivityFeed address={address} compact />
-          <InsightsCard address={address} />
+          {/* Never shrink Insights: the column is height-capped, so something has
+              to absorb the difference, and the Activity feed is the one built to
+              (it scrolls). Letting Insights shrink instead squashed its content. */}
+          <div className="lg:shrink-0">
+            <InsightsCard address={address} />
+          </div>
         </div>
       </div>
 
