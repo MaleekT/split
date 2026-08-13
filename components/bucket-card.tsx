@@ -40,9 +40,46 @@ interface Props {
   isGenerated?: boolean
   isPrimary?: boolean
   onSendFromWallet?: () => void
+  /**
+   * Classification of this bucket's destination, when it is a lock. A locked
+   * bucket is a THIRD kind of bucket, not a flag: its money lives in its own
+   * contract, so its balance, its status line and its withdraw action all differ.
+   */
+  lock?: {
+    classification: 'ELIGIBLE' | 'FOREIGN' | 'UNSUPPORTED' | 'ORDINARY' | 'UNAVAILABLE' | 'CONFLICT'
+    balance?: bigint
+    unlockedNow?: boolean
+    unlockAt?: bigint
+    target?: bigint
+    targetMet?: boolean
+  }
+  onWithdrawLock?: () => void
   onSchedule: () => void
   onSetGoal: () => void
   onDelete: () => void
+}
+
+/**
+ * The one-line status under a locked bucket's amount. Prefers the target when one
+ * is set and still short, since "312 of 500" is more actionable than a date
+ * months away; otherwise counts down to the unlock date.
+ */
+function lockStatusLine(lock?: {
+  unlockAt?: bigint; target?: bigint; targetMet?: boolean; balance?: bigint
+}): string {
+  if (!lock) return 'Locked'
+  const { unlockAt, target, targetMet, balance } = lock
+  if (target !== undefined && target > 0n && !targetMet && balance !== undefined && balance < target) {
+    return `${formatUsdc(balance)} of ${formatUsdc(target)}`
+  }
+  if (unlockAt !== undefined && unlockAt > 0n) {
+    const days = Number(unlockAt - BigInt(Math.floor(Date.now() / 1000))) / 86_400
+    if (days <= 0) return 'Ready to withdraw'
+    if (days < 1)  return 'Unlocks today'
+    if (days < 2)  return 'Unlocks tomorrow'
+    return `Unlocks in ${Math.ceil(days)} days`
+  }
+  return 'Locked'
 }
 
 function ActionButton({
@@ -82,14 +119,30 @@ export function BucketCard({
   onDelete,
   isGenerated = false,
   isPrimary = false,
+  lock,
+  onWithdrawLock,
   onSendFromWallet,
 }: Props) {
   const menuRef = useRef<HTMLDetailsElement>(null)
   const isHold = bucket.destination === ZERO_ADDRESS
+  // A lock this user actually owns. FOREIGN, UNSUPPORTED, UNAVAILABLE and
+  // CONFLICT deliberately do NOT qualify: each renders differently and none may
+  // present the balance as this user's spendable money.
+  const isLocked = lock?.classification === 'ELIGIBLE'
+  const lockConflict = lock?.classification === 'CONFLICT'
+  const lockForeign = lock?.classification === 'FOREIGN'
+  const lockUnavailable = lock?.classification === 'UNAVAILABLE'
   const hasGoal = goal !== undefined && goal > 0n
   const canWithdraw = bucket.balance > 0n
   const pct = bpsToPCT(bucket.bps)
-  const amount = isHold ? bucket.balance : (routedTotal ?? 0n)
+  // A locked bucket's money lives in its own contract, so its balance is read
+  // from there. Falling back to cumulative routed totals would over-report after
+  // any withdrawal.
+  const amount = isHold
+    ? bucket.balance
+    : (isLocked || lockConflict) && lock?.balance !== undefined
+      ? lock.balance
+      : (routedTotal ?? 0n)
   const Icon = bucketIconFor(iconSlug)
   const accent = BUCKET_PALETTE[colorIndex % BUCKET_PALETTE.length]!
   const accentColor = `rgb(${accent.r}, ${accent.g}, ${accent.b})`
@@ -128,7 +181,12 @@ export function BucketCard({
               className={isHold ? '' : 'font-mono'}
               style={{ color: 'var(--text-2)', fontSize: 11, marginTop: 1, fontFamily: isHold ? "'Inter', sans-serif" : undefined }}
             >
-              {isHold ? 'Holds in contract' : shortAddress(bucket.destination)}
+              {isHold ? 'Holds in contract'
+              : isLocked ? (lock?.unlockedNow ? 'Unlocked' : 'Locked')
+              : lockConflict ? 'Shared lock'
+              : lockForeign ? 'Not your lock'
+              : lockUnavailable ? 'Could not verify'
+              : shortAddress(bucket.destination)}
             </p>
           </div>
         </div>
@@ -152,7 +210,13 @@ export function BucketCard({
             </p>
           </div>
           <p className="truncate text-right" style={{ color: 'var(--text-2)', fontSize: 11 }}>
-            {!isHold && isGenerated ? 'Split wallet' : !isHold && isPrimary ? 'Primary wallet' : isHold ? 'Available to withdraw' : 'Auto-routed'}
+            {isLocked ? (lock?.unlockedNow ? 'Ready to withdraw' : lockStatusLine(lock))
+              : lockConflict ? 'Shared with another bucket'
+              : lockForeign ? 'Owned by another account'
+              : lockUnavailable ? 'Retry to check'
+              : !isHold && isGenerated ? 'Split wallet'
+              : !isHold && isPrimary ? 'Primary wallet'
+              : isHold ? 'Available to withdraw' : 'Auto-routed'}
           </p>
         </div>
         <div className="bucket-allocation-track" aria-hidden="true">
@@ -186,7 +250,23 @@ export function BucketCard({
       <div className="bucket-card-footer">
         <div className="flex min-w-0 flex-1 gap-2">
           <ActionButton icon={<SquarePen size={15} />} label="Edit" onClick={onEdit} />
-          {isGenerated && onSendFromWallet ? (
+          {isLocked && onWithdrawLock ? (
+            <ActionButton
+              icon={<ArrowDownToLine size={15} />}
+              label="Withdraw"
+              onClick={onWithdrawLock}
+              disabled={(lock?.balance ?? 0n) === 0n}
+            />
+          ) : lockConflict || lockForeign || lockUnavailable ? (
+            // Never offer a card-level withdrawal for a lock we cannot attribute
+            // unambiguously to this bucket, or cannot verify at all.
+            <ActionButton
+              icon={<ArrowDownToLine size={15} />}
+              label="Withdraw"
+              onClick={() => {}}
+              disabled
+            />
+          ) : isGenerated && onSendFromWallet ? (
             <ActionButton icon={<Send size={15} />} label="Send" onClick={onSendFromWallet} />
           ) : (
             <ActionButton

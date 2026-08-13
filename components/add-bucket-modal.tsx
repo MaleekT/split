@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { isAddress, decodeEventLog, parseUnits } from 'viem'
-import { useWriteContract, useAccount } from 'wagmi'
+import { useWriteContract, useAccount, useChainId } from 'wagmi'
 import { useQueryClient } from '@tanstack/react-query'
 import { getSplitContract, splitAbi, ZERO_ADDRESS, type SplitBucket } from '@/lib/contracts'
 import { useScrollLock } from '@/hooks/use-scroll-lock'
@@ -12,6 +12,8 @@ import { publicClient } from '@/lib/arc'
 import { pctToBPS } from '@/lib/bps'
 import { parseSplitError } from '@/lib/errors'
 import { useBucketWallets } from '@/hooks/use-bucket-wallets'
+import { bucketLockFactoryAbi, trustedFactoryFor } from '@/lib/lock-contracts'
+import { validateUnlockDate, MIN_LOCK_DURATION_SECONDS } from '@/lib/lock'
 import { IconPicker } from './icon-picker'
 
 interface Props {
@@ -40,7 +42,14 @@ export function AddBucketModal({ onClose }: Props) {
   // 'hold' keeps funds in the contract (destination 0x0, the existing default),
   // 'manual' is the existing paste-an-address path, 'generated' has Split derive
   // a wallet it can also spend from.
-  const [destMode, setDestMode] = useState<'hold' | 'manual' | 'generated'>('hold')
+  // 'locked' routes the bucket's share to a BucketLock the user owns. It is a
+  // fourth DESTINATION, not a flag: the money leaves Split entirely, which is the
+  // only way a lock can actually be enforced (Split.withdraw has no hook).
+  const [destMode, setDestMode] = useState<'hold' | 'manual' | 'generated' | 'locked'>('hold')
+  const chainId    = useChainId()
+  const lockFactory = trustedFactoryFor(chainId)
+  const [lockDateStr, setLockDateStr]     = useState('')
+  const [lockTargetStr, setLockTargetStr] = useState('')
   const [status, setStatus]     = useState<string | null>(null)
   const [primaryConfirmed, setPrimaryConfirmed] = useState(false)
 
@@ -118,11 +127,56 @@ export function AddBucketModal({ onClose }: Props) {
       destMode === 'hold' ? ZERO_ADDRESS
       : destMode === 'manual' && isAddress(trimmed) ? (trimmed as `0x${string}`)
       : destMode === 'generated' ? ZERO_ADDRESS  // replaced below, once derived
+      : destMode === 'locked' ? ZERO_ADDRESS     // replaced below, once deployed
       : null
 
     if (destination === null) {
       setError('Enter a valid destination address, or choose another option.')
       return
+    }
+
+    // Validate the lock BEFORE anything is sent: the factory would revert anyway,
+    // and failing in the form is cheaper and clearer than failing in the wallet.
+    let lockUnlockAt = 0n
+    let lockTarget   = 0n
+    if (destMode === 'locked') {
+      if (!address) {
+        setError('Connect your wallet to create a locked bucket.')
+        return
+      }
+      if (!lockFactory) {
+        setError('Locked buckets are not available on this network.')
+        return
+      }
+      if (!lockDateStr) {
+        setError('Choose an unlock date. Locked buckets always need one.')
+        return
+      }
+      // Local midnight of the chosen day, which is what a date input means to a
+      // person, rather than UTC midnight which can read as the day before.
+      lockUnlockAt = BigInt(Math.floor(new Date(`${lockDateStr}T00:00:00`).getTime() / 1000))
+      const nowSec = BigInt(Math.floor(Date.now() / 1000))
+      const dateProblem = validateUnlockDate(lockUnlockAt, nowSec)
+      if (dateProblem === 'DateRequired') {
+        setError('Choose an unlock date. Locked buckets always need one.')
+        return
+      }
+      if (dateProblem === 'UnlockTooSoon') {
+        setError(`The unlock date must be at least ${Number(MIN_LOCK_DURATION_SECONDS) / 86_400} day away.`)
+        return
+      }
+      if (lockTargetStr.trim()) {
+        try {
+          lockTarget = parseUnits(lockTargetStr.trim(), 6)
+        } catch {
+          setError('Enter a valid target amount, or leave it empty.')
+          return
+        }
+        if (lockTarget <= 0n) {
+          setError('A target amount must be greater than zero, or leave it empty.')
+          return
+        }
+      }
     }
     if (isPrimaryDestination && !primaryConfirmed) {
       setError('Confirm that you understand the privacy impact of using your primary wallet.')
@@ -164,6 +218,43 @@ export function AddBucketModal({ onClose }: Props) {
           setStatus(null)
           return
         }
+      }
+
+      // Deploy the lock first, so `addBucket` can be given a real destination.
+      // Two transactions, not one: Split has no batching primitive and cannot be
+      // modified. If the user abandons after this one, the lock is an orphan they
+      // can still attach or withdraw from; nothing is lost.
+      if (destMode === 'locked' && lockFactory) {
+        setStatus('Creating your lock…')
+        const lockHash = await writeContractAsync({
+          address:      lockFactory.address,
+          abi:          bucketLockFactoryAbi,
+          functionName: 'createLock',
+          args:         [lockUnlockAt, lockTarget],
+        })
+        const lockReceipt = await publicClient.waitForTransactionReceipt({
+          hash: lockHash, pollingInterval: 500, timeout: TX_TIMEOUT_MS,
+        })
+        let created: `0x${string}` | null = null
+        for (const log of lockReceipt.logs) {
+          try {
+            const decoded = decodeEventLog({ abi: bucketLockFactoryAbi, data: log.data, topics: log.topics })
+            if (decoded.eventName === 'LockCreated') {
+              created = (decoded.args as { lock: `0x${string}` }).lock
+              break
+            }
+          } catch { /* not a factory event */ }
+        }
+        if (!created) {
+          // The lock may well exist; we simply could not read its address back.
+          // Say so rather than implying nothing happened, and stop before
+          // creating a bucket pointed at the wrong place.
+          setError('Your lock was created but its address could not be read. Check Lock management before retrying, so you do not create a second one.')
+          setPending(false)
+          setStatus(null)
+          return
+        }
+        destination = created
       }
 
       setStatus('Confirm in your wallet…')
@@ -293,11 +384,12 @@ export function AddBucketModal({ onClose }: Props) {
 
           <div className="space-y-1.5">
             <span className="text-xs font-medium text-[var(--split-text-secondary)]">Where this bucket sends</span>
-            <div role="radiogroup" aria-label="Where this bucket sends" className="grid grid-cols-3 gap-1.5">
+            <div role="radiogroup" aria-label="Where this bucket sends" className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
               {([
                 ['hold',      'Hold in Split'],
                 ['manual',    'I have a wallet'],
                 ['generated', 'Generate one'],
+                ['locked',    'Lock it'],
               ] as const).map(([mode, label]) => {
                 const selected = destMode === mode
                 return (
@@ -331,6 +423,51 @@ export function AddBucketModal({ onClose }: Props) {
                 onChange={(e) => { setDestStr(e.target.value); setPrimaryConfirmed(false) }}
                 className={`${inputCls} font-mono mt-1.5`}
               />
+            )}
+
+            {destMode === 'locked' && (
+              <div className="mt-1.5 space-y-2">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-[var(--split-text-secondary)]" htmlFor="lock-date">
+                    Unlock date <span className="text-[var(--split-text-tertiary)]">(required)</span>
+                  </label>
+                  <input
+                    id="lock-date"
+                    type="date"
+                    value={lockDateStr}
+                    onChange={(e) => { setLockDateStr(e.target.value); setError(null) }}
+                    className={inputCls}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-[var(--split-text-secondary)]" htmlFor="lock-target">
+                    Target amount <span className="text-[var(--split-text-tertiary)]">(optional, unlocks earlier)</span>
+                  </label>
+                  <input
+                    id="lock-target"
+                    type="number"
+                    min="0"
+                    step="0.000001"
+                    inputMode="decimal"
+                    placeholder="e.g. 500"
+                    value={lockTargetStr}
+                    onChange={(e) => { setLockTargetStr(e.target.value); setError(null) }}
+                    className={`${inputCls} font-mono`}
+                  />
+                </div>
+                <div className="rounded-xl border border-[var(--split-border)] bg-[var(--split-bg-secondary)] p-3">
+                  <p className="text-[11px] leading-relaxed text-[var(--split-text-secondary)]">
+                    Withdrawing before either condition is met costs{' '}
+                    <strong className="text-[var(--split-text-primary)]">10%</strong> of the amount you take out.
+                  </p>
+                  {lockTargetStr.trim() !== '' && (
+                    <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--split-text-tertiary)]">
+                      Any USDC sent to this lock, including funds sent by another person,
+                      counts toward the target and can unlock it early.
+                    </p>
+                  )}
+                </div>
+              </div>
             )}
 
             {isPrimaryDestination && (

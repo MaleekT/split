@@ -20,6 +20,8 @@ import { AllocationOverview } from '@/components/allocation-overview'
 import { CoinGraphic } from '@/components/coin-graphic'
 import { BucketCard } from '@/components/bucket-card'
 import { useSplitTotal } from '@/hooks/use-split-total'
+import { useBucketLocks } from '@/hooks/use-bucket-locks'
+import { LockWithdrawModal } from '@/components/lock-withdraw-modal'
 import { BucketWalletSendModal } from '@/components/bucket-wallet-send-modal'
 import { useBucketWallets, type GeneratedBucketWallet } from '@/hooks/use-bucket-wallets'
 import { AddBucketModal } from '@/components/add-bucket-modal'
@@ -167,11 +169,40 @@ export default function DashboardPage() {
     },
   })
 
+  // Classify destinations that are BucketLocks. Four checks, all required, and
+  // failing closed: trusted factory, owner == this user, right token, right
+  // chain. `isLock` alone proves provenance, never ownership.
+  const lockDestinations = useMemo(
+    () => buckets.filter((b) => b.destination !== ZERO_ADDRESS).map((b) => b.destination),
+    [buckets],
+  )
+  const { classified: lockMap, factoryValid: lockFactoryValid, loadOrphans } = useBucketLocks(lockDestinations)
+
+  const [withdrawLock, setWithdrawLock] = useState<
+    { bucketName: string; address: `0x${string}`; state: NonNullable<ReturnType<typeof lockMap.get>>['state']; unlockedNow: boolean } | null
+  >(null)
+
   // Match every card's source: contract balance for holds, live balance for
   // dedicated generated wallets, and cumulative events for other destinations.
+  // Distinct eligible lock balances are added ONCE, outside the per-bucket
+  // reduce. Two buckets can point at the same lock (Split does not prevent it),
+  // and adding it per bucket would double-count a single balance.
+  const countedLocks = new Set<string>()
   const bucketTotal = buckets.reduce((sum, b) => {
     if (b.destination === ZERO_ADDRESS) return sum + b.balance
-    const generatedBalance = generatedBalanceByAddress.get(b.destination.toLowerCase())
+    const key = b.destination.toLowerCase()
+
+    const lock = lockMap.get(key)
+    if (lock && (lock.classification === 'ELIGIBLE' || lock.classification === 'CONFLICT')) {
+      if (countedLocks.has(key)) return sum       // already counted this lock
+      countedLocks.add(key)
+      return sum + (lock.state?.balance ?? 0n)
+    }
+    // FOREIGN, UNSUPPORTED and UNAVAILABLE contribute nothing: they are not this
+    // user's spendable money, or could not be verified at all.
+    if (lock && lock.classification !== 'ORDINARY') return sum
+
+    const generatedBalance = generatedBalanceByAddress.get(key)
     if (generatedBalance !== undefined) return sum + generatedBalance
     const routed = routedTotals?.[String(b.id)]
     return sum + (routed ? BigInt(routed) : 0n)
@@ -529,6 +560,28 @@ export default function DashboardPage() {
 
                       <BucketCard
                         bucket={b}
+                        lock={(() => {
+                          const l = lockMap.get(b.destination.toLowerCase())
+                          if (!l) return undefined
+                          return {
+                            classification: l.classification,
+                            balance:        l.state?.balance,
+                            unlockedNow:    l.unlockedNow,
+                            unlockAt:       l.state?.unlockAt,
+                            target:         l.state?.target,
+                            targetMet:      l.state?.targetMet,
+                          }
+                        })()}
+                        onWithdrawLock={(() => {
+                          const l = lockMap.get(b.destination.toLowerCase())
+                          if (!l || l.classification !== 'ELIGIBLE' || !l.state) return undefined
+                          return () => setWithdrawLock({
+                            bucketName:  b.name,
+                            address:     l.address,
+                            state:       l.state,
+                            unlockedNow: l.unlockedNow,
+                          })
+                        })()}
                         goal={goals?.[String(b.id)]}
                         isGenerated={!!gen}
                         isPrimary={b.destination.toLowerCase() === address.toLowerCase()}
@@ -574,6 +627,21 @@ export default function DashboardPage() {
       </div>
 
       {addOpen && <AddBucketModal onClose={() => setAddOpen(false)} />}
+
+      {withdrawLock?.state && (
+        <LockWithdrawModal
+          bucketName={withdrawLock.bucketName}
+          lockAddress={withdrawLock.address}
+          state={withdrawLock.state}
+          unlockedNow={withdrawLock.unlockedNow}
+          onClose={() => setWithdrawLock(null)}
+          onWithdrawn={() => {
+            void queryClient.invalidateQueries({ queryKey: ['locks'] })
+            void queryClient.invalidateQueries({ queryKey: ['activity', address] })
+            void refetch()
+          }}
+        />
+      )}
 
       {deleteNotice && (
         <div className="bucket-delete-toast" role="alert">
