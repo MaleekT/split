@@ -662,7 +662,18 @@ export default function DashboardPage() {
           onSent={() => { void refetch() }}
         />
       )}
-      {modal?.kind === 'edit' && <EditBucketModal bucket={modal.bucket} onClose={() => setModal(null)} />}
+      {modal?.kind === 'edit' && (
+        <EditBucketModal
+          bucket={modal.bucket}
+          // UI guard only: updateBucket has no such check on the immutable Split
+          // contract, so a direct call can still re-point a locked bucket.
+          destinationLocked={(() => {
+            const l = lockMap.get(modal.bucket.destination.toLowerCase())
+            return l?.classification === 'ELIGIBLE' && !l.unlockedNow
+          })()}
+          onClose={() => setModal(null)}
+        />
+      )}
       {modal?.kind === 'withdraw' && <WithdrawModal bucket={modal.bucket} onClose={() => setModal(null)} />}
       {modal?.kind === 'schedule' && <ScheduleModal bucket={modal.bucket} onClose={() => setModal(null)} />}
       {modal?.kind === 'goal' && (

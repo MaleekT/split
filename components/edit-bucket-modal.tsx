@@ -12,6 +12,17 @@ import { IconPicker } from './icon-picker'
 
 interface Props {
   bucket:  SplitBucket
+  /**
+   * True while this bucket's destination is a lock of the user's that has not yet
+   * met either unlock condition. The destination field is then read-only.
+   *
+   * A UI GUARD ONLY. `updateBucket` lives on the immutable Split contract and has
+   * no such check, so a direct contract call can still re-point the bucket.
+   * Nothing is at risk if someone does: money already inside the lock stays
+   * locked, they would only stop feeding their own lock. This must never be
+   * described as contract-enforced.
+   */
+  destinationLocked?: boolean
   onClose: () => void
 }
 
@@ -20,7 +31,7 @@ const inputCls =
 
 const TX_TIMEOUT_MS = 30_000
 
-export function EditBucketModal({ bucket, onClose }: Props) {
+export function EditBucketModal({ bucket, destinationLocked = false, onClose }: Props) {
   const { address } = useAccount()
   const { writeContractAsync } = useWriteContract()
   const queryClient = useQueryClient()
@@ -170,16 +181,27 @@ export function EditBucketModal({ bucket, onClose }: Props) {
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-[var(--split-text-secondary)]" htmlFor="edit-dest">
               Destination address{' '}
-              <span className="text-[var(--split-text-tertiary)] font-normal">(leave empty to hold)</span>
+              <span className="text-[var(--split-text-tertiary)] font-normal">
+                {destinationLocked ? '(locked)' : '(leave empty to hold)'}
+              </span>
             </label>
             <input
               id="edit-dest"
               type="text"
               placeholder="0x…"
               value={destStr}
-              onChange={(e) => setDestStr(e.target.value)}
-              className={`${inputCls} font-mono`}
+              readOnly={destinationLocked}
+              aria-readonly={destinationLocked}
+              aria-describedby={destinationLocked ? 'edit-dest-locked' : undefined}
+              onChange={(e) => { if (!destinationLocked) setDestStr(e.target.value) }}
+              className={`${inputCls} font-mono ${destinationLocked ? 'cursor-not-allowed opacity-60' : ''}`}
             />
+            {destinationLocked && (
+              <p id="edit-dest-locked" className="text-[11px] leading-relaxed text-[var(--split-text-tertiary)]">
+                This bucket is locked, so its destination cannot be changed until it
+                unlocks. Its name and allocation can still be edited.
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
