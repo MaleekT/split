@@ -22,6 +22,7 @@ import { BucketCard } from '@/components/bucket-card'
 import { useSplitTotal } from '@/hooks/use-split-total'
 import { useBucketLocks } from '@/hooks/use-bucket-locks'
 import { LockWithdrawModal } from '@/components/lock-withdraw-modal'
+import { LockBucketModal } from '@/components/lock-bucket-modal'
 import { BucketWalletSendModal } from '@/components/bucket-wallet-send-modal'
 import { useBucketWallets, type GeneratedBucketWallet } from '@/hooks/use-bucket-wallets'
 import { AddBucketModal } from '@/components/add-bucket-modal'
@@ -178,6 +179,9 @@ export default function DashboardPage() {
   )
   const { classified: lockMap, factoryValid: lockFactoryValid, loadOrphans } = useBucketLocks(lockDestinations)
 
+  const [lockBucket, setLockBucket] = useState<
+    { bucket: SplitBucket; resumeLock?: `0x${string}` } | null
+  >(null)
   const [withdrawLock, setWithdrawLock] = useState<
     { bucketName: string; address: `0x${string}`; state: NonNullable<ReturnType<typeof lockMap.get>>['state']; unlockedNow: boolean } | null
   >(null)
@@ -572,6 +576,19 @@ export default function DashboardPage() {
                             targetMet:      l.state?.targetMet,
                           }
                         })()}
+                        onLockBucket={(() => {
+                          const l = lockMap.get(b.destination.toLowerCase())
+                          // Interrupted migration: already points at the lock but
+                          // Split still holds the old balance.
+                          if (l?.classification === 'ELIGIBLE' && b.balance > 0n) {
+                            return () => setLockBucket({ bucket: b, resumeLock: l.address })
+                          }
+                          // A plain hold bucket can be converted into a locked one.
+                          if (b.destination === ZERO_ADDRESS && lockFactoryValid) {
+                            return () => setLockBucket({ bucket: b })
+                          }
+                          return undefined
+                        })()}
                         onWithdrawLock={(() => {
                           const l = lockMap.get(b.destination.toLowerCase())
                           if (!l || l.classification !== 'ELIGIBLE' || !l.state) return undefined
@@ -627,6 +644,14 @@ export default function DashboardPage() {
       </div>
 
       {addOpen && <AddBucketModal onClose={() => setAddOpen(false)} />}
+
+      {lockBucket && (
+        <LockBucketModal
+          bucket={lockBucket.bucket}
+          resumeLock={lockBucket.resumeLock}
+          onClose={() => { setLockBucket(null); void refetch() }}
+        />
+      )}
 
       {withdrawLock?.state && (
         <LockWithdrawModal

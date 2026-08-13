@@ -54,6 +54,9 @@ interface Props {
     targetMet?: boolean
   }
   onWithdrawLock?: () => void
+  /** Offered on a hold bucket (start locking) and on an interrupted migration
+   *  (finish the sweep). Absent when neither applies. */
+  onLockBucket?: () => void
   onSchedule: () => void
   onSetGoal: () => void
   onDelete: () => void
@@ -121,6 +124,7 @@ export function BucketCard({
   isPrimary = false,
   lock,
   onWithdrawLock,
+  onLockBucket,
   onSendFromWallet,
 }: Props) {
   const menuRef = useRef<HTMLDetailsElement>(null)
@@ -129,6 +133,12 @@ export function BucketCard({
   // CONFLICT deliberately do NOT qualify: each renders differently and none may
   // present the balance as this user's spendable money.
   const isLocked = lock?.classification === 'ELIGIBLE'
+  // Migration is not atomic: pointing the bucket at a lock and sweeping its old
+  // Split balance are separate transactions. While `bucket.balance > 0` the old
+  // money is STILL WITHDRAWABLE FROM SPLIT, so the card must say so. Claiming
+  // "Locked" here would be the one lie that actively misleads someone about
+  // their own money.
+  const migrationIncomplete = isLocked && bucket.balance > 0n
   const lockConflict = lock?.classification === 'CONFLICT'
   const lockForeign = lock?.classification === 'FOREIGN'
   const lockUnavailable = lock?.classification === 'UNAVAILABLE'
@@ -182,6 +192,7 @@ export function BucketCard({
               style={{ color: 'var(--text-2)', fontSize: 11, marginTop: 1, fontFamily: isHold ? "'Inter', sans-serif" : undefined }}
             >
               {isHold ? 'Holds in contract'
+              : migrationIncomplete ? 'Finish locking'
               : isLocked ? (lock?.unlockedNow ? 'Unlocked' : 'Locked')
               : lockConflict ? 'Shared lock'
               : lockForeign ? 'Not your lock'
@@ -210,7 +221,8 @@ export function BucketCard({
             </p>
           </div>
           <p className="truncate text-right" style={{ color: 'var(--text-2)', fontSize: 11 }}>
-            {isLocked ? (lock?.unlockedNow ? 'Ready to withdraw' : lockStatusLine(lock))
+            {migrationIncomplete ? `${formatUsdc(bucket.balance)} still in Split` 
+              : isLocked ? (lock?.unlockedNow ? 'Ready to withdraw' : lockStatusLine(lock))
               : lockConflict ? 'Shared with another bucket'
               : lockForeign ? 'Owned by another account'
               : lockUnavailable ? 'Retry to check'
@@ -250,7 +262,13 @@ export function BucketCard({
       <div className="bucket-card-footer">
         <div className="flex min-w-0 flex-1 gap-2">
           <ActionButton icon={<SquarePen size={15} />} label="Edit" onClick={onEdit} />
-          {isLocked && onWithdrawLock ? (
+          {migrationIncomplete && onLockBucket ? (
+            <ActionButton
+              icon={<ArrowDownToLine size={15} />}
+              label="Move in"
+              onClick={onLockBucket}
+            />
+          ) : isLocked && onWithdrawLock ? (
             <ActionButton
               icon={<ArrowDownToLine size={15} />}
               label="Withdraw"

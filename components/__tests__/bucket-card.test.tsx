@@ -118,6 +118,37 @@ describe('BucketCard lock states', () => {
     expect(screen.getByText(/312\.00 of 500\.00/)).toBeInTheDocument()
   })
 
+  // The single most important case in this file. Migration is not atomic, so a
+  // bucket can point at its lock while Split still holds the old balance. That
+  // money is STILL WITHDRAWABLE, and saying "Locked" would be the one lie that
+  // actively misleads someone about their own funds.
+  it('says Finish locking, never Locked, while Split still holds the balance', () => {
+    renderCard({
+      bucket: bucket({ balance: 30_000_000n }),
+      lock: { classification: 'ELIGIBLE', balance: 5_000_000n, unlockedNow: false, unlockAt: YEAR_AWAY },
+      onWithdrawLock: vi.fn(),
+      onLockBucket: vi.fn(),
+    })
+    expect(screen.getByText('Finish locking')).toBeInTheDocument()
+    // "Locked" must not appear as the state. Checked exactly, so the substring
+    // inside "Finish locking" cannot accidentally satisfy it.
+    expect(screen.queryByText('Locked')).not.toBeInTheDocument()
+    // And it must say where the un-locked money actually is.
+    expect(screen.getByText(/30\.00 still in Split/)).toBeInTheDocument()
+  })
+
+  it('offers a resume action for an interrupted migration', () => {
+    const onLockBucket = vi.fn()
+    renderCard({
+      bucket: bucket({ balance: 30_000_000n }),
+      lock: { classification: 'ELIGIBLE', balance: 0n, unlockedNow: false, unlockAt: YEAR_AWAY },
+      onLockBucket,
+    })
+    const resume = screen.getAllByRole('button').find((b) => /move in/i.test(b.textContent ?? ''))
+    expect(resume).toBeDefined()
+    expect(resume).not.toBeDisabled()
+  })
+
   it('leaves an ordinary hold bucket completely unchanged', () => {
     renderCard({ bucket: bucket({ destination: ZERO as `0x${string}`, balance: 7_000_000n }) })
     expect(screen.getByText('Holds in contract')).toBeInTheDocument()
