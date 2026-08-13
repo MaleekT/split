@@ -23,6 +23,7 @@ import { useSplitTotal } from '@/hooks/use-split-total'
 import { useBucketLocks } from '@/hooks/use-bucket-locks'
 import { LockWithdrawModal } from '@/components/lock-withdraw-modal'
 import { LockBucketModal } from '@/components/lock-bucket-modal'
+import { OrphanLocksCard } from '@/components/orphan-locks-card'
 import { BucketWalletSendModal } from '@/components/bucket-wallet-send-modal'
 import { useBucketWallets, type GeneratedBucketWallet } from '@/hooks/use-bucket-wallets'
 import { AddBucketModal } from '@/components/add-bucket-modal'
@@ -179,6 +180,7 @@ export default function DashboardPage() {
   )
   const { classified: lockMap, factoryValid: lockFactoryValid, loadOrphans } = useBucketLocks(lockDestinations)
 
+  const [orphanRefresh, setOrphanRefresh] = useState(0)
   const [lockBucket, setLockBucket] = useState<
     { bucket: SplitBucket; resumeLock?: `0x${string}` } | null
   >(null)
@@ -625,6 +627,11 @@ export default function DashboardPage() {
 
           {/* Allocation overview */}
           {!noBuckets && <AllocationOverview buckets={buckets} routedTotals={routedTotals} />}
+
+          {/* Renders nothing unless the user actually has an unattached lock.
+              Without it, a lock left behind by a deleted bucket or an
+              interrupted creation would be real, owned, and unreachable. */}
+          {lockFactoryValid && <OrphanLocksCard loadOrphans={loadOrphans} refreshSignal={orphanRefresh} />}
         </div>
 
         {/* ── RIGHT COLUMN ── */}
@@ -649,7 +656,7 @@ export default function DashboardPage() {
         <LockBucketModal
           bucket={lockBucket.bucket}
           resumeLock={lockBucket.resumeLock}
-          onClose={() => { setLockBucket(null); void refetch() }}
+          onClose={() => { setLockBucket(null); setOrphanRefresh((n) => n + 1); void refetch() }}
         />
       )}
 
