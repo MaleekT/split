@@ -10,6 +10,7 @@ import { publicClient } from '@/lib/arc'
 import { arcTestnet } from '@/lib/chain'
 import { parseSplitError } from '@/lib/errors'
 import { formatUsdc } from '@/lib/format'
+import { evaluateHoldInvariant, dustCatcherArgs, maxStrandedPerDeposit } from '@/lib/hold-invariant'
 import { useRoutedTotals } from '@/hooks/use-routed-totals'
 import { useBucketIcons } from '@/hooks/use-bucket-icons'
 import { UsdcAmount } from '@/components/usdc-amount'
@@ -214,7 +215,38 @@ export default function DashboardPage() {
     return sum + (routed ? BigInt(routed) : 0n)
   }, 0n)
   const hasDestinationBuckets = buckets.some((b) => b.destination !== ZERO_ADDRESS)
-  const bucketTotalPartial = hasDestinationBuckets && (routedTotalsPending || routedTotalsError)
+  // Split credits the floor-division remainder only to a HOLD bucket. With none,
+  // `lastHoldIdx` stays at its sentinel and the leftover is credited to nothing,
+  // and Split has no sweep or recover function, so it is stranded permanently.
+  // Bounded at (active buckets - 1) raw units, so at most 0.000009 USDC per
+  // deposit. Policy A: warn and offer the fix, never block.
+  const holdInvariant = evaluateHoldInvariant(
+    buckets.map((b) => ({ id: b.id, bps: b.bps, destination: b.destination, active: b.active })),
+  )
+
+  async function addDustCatcher() {
+    const { name, bps, destination } = dustCatcherArgs()
+    try {
+      const hash = await writeContractAsync({
+        address: contractAddress, abi: splitAbi,
+        functionName: 'addBucket', args: [name, bps, destination as `0x${string}`],
+      })
+      await waitForReceiptCapped(hash)
+      await refetch()
+    } catch (err) {
+      setDepositError(parseSplitError(err))
+    }
+  }
+
+  // A lock whose state could not be read contributes NOTHING to the sum above.
+  // Left unsaid, that is a confidently wrong total - the exact failure the
+  // existing partial notice was built to prevent. Reuses that mechanism rather
+  // than inventing a second one.
+  const anyLockUnverifiable = [...lockMap.values()].some(
+    (l) => l.classification === 'UNAVAILABLE',
+  )
+  const bucketTotalPartial =
+    (hasDestinationBuckets && (routedTotalsPending || routedTotalsError)) || anyLockUnverifiable
   const { total: totalBal, isPartial, vaultLocked } = useSplitTotal(bucketTotal, bucketTotalPartial)
 
   // The total is assembled from sources that land at very different speeds: hold
@@ -481,6 +513,32 @@ export default function DashboardPage() {
                 style={{ background: 'var(--bg-3)', border: '0.5px solid var(--border)', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: 'var(--text)' }}
               />
             </form>
+
+            {/* Deposits are NOT blocked: the amount at stake is a few millionths
+                of a USDC, and blocking would remove a configuration the product
+                already allows. A zero-BPS hold bucket absorbs the remainder
+                without taking any allocation, so the fix costs nothing. */}
+            {holdInvariant.state === 'DEGRADED' && (
+              <div className="relative" style={{ zIndex: 1, marginTop: 10, borderRadius: 12, border: '0.5px solid var(--warning-border, rgba(251,191,36,.35))', background: 'rgba(251,191,36,.06)', padding: '10px 12px' }}>
+                <p className="flex items-start gap-1.5" style={{ fontSize: 11.5, lineHeight: 1.55, color: 'var(--warning, #FBBF24)' }}>
+                  <AlertTriangle size={13} aria-hidden="true" style={{ flexShrink: 0, marginTop: 2 }} />
+                  <span>
+                    Every bucket sends somewhere, so each deposit can leave up to{' '}
+                    {maxStrandedPerDeposit(buckets.filter((b) => b.active).length)} millionths of a
+                    USDC unassigned inside Split, which cannot be recovered. Adding a
+                    hold bucket catches it.
+                  </span>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void addDustCatcher()}
+                  className="mt-2 transition-opacity hover:opacity-80"
+                  style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--accent)', background: 'var(--accent-bg)', border: '1px solid var(--accent-border)', borderRadius: 8, padding: '5px 10px' }}
+                >
+                  Add a catch-all bucket (0%)
+                </button>
+              </div>
+            )}
 
             {noBuckets && (
               <p className="relative mt-3 text-xs" style={{ zIndex: 1, color: 'var(--warning)' }}>
